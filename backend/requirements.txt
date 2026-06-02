@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+python-dotenv
+joblib
+pandas
+numpy
+scikit-learn
+scipy
+fuzzywuzzy
+python-Levenshtein
+redis          # ← NEW: 3-layer cache Layer 1
+pyarrow        # for reading .parquet model artifacts

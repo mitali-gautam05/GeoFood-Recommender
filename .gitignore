@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+
+# Database
+*.db
+
+# Redis
+dump.rdb
+
+# Model Artifacts
+*.pkl
+*.joblib
+*.parquet
+
+# Flutter
+.dart_tool/
+build/
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
+*_log.txt
+error_log.txt
