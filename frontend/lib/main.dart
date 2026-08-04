@@ -62,7 +62,7 @@ class GeoTasteApp extends StatelessWidget {
       title:                      'GeoTaste',
       theme:                      AppTheme.lightTheme,
       darkTheme:                  AppTheme.darkTheme,
-      themeMode:                  ThemeMode.dark, // ← always dark
+      themeMode:                  ThemeMode.light, // ← always dark
       debugShowCheckedModeBanner: false,
       initialRoute: '/splash',
       routes: {
