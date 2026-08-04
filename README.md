@@ -214,14 +214,3 @@ OPENWEATHER_API_KEY=your_key_here
 | `GET` | `/health` | Health check |
 
 ---
-
-## Roadmap
-
-- [ ] Docker Compose setup for one-command local start
-- [ ] Challenge completion backend persistence
-- [ ] Passport sync across devices (currently local)
-- [ ] Collaborative filtering to replace/augment TF-IDF
-- [ ] Model evaluation dashboard (precision@k, coverage)
-- [ ] Production deployment (Railway / Render)
-
----
