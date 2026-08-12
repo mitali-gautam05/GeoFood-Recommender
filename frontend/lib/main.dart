@@ -68,7 +68,7 @@ class GeoTasteApp extends StatelessWidget {
       routes: {
         '/splash':      (_) => const SplashScreen(),
         '/onboarding':  (_) => const OnboardingScreen(),
-        '/login':       (_) => const LoginScreen(),
+        '/login':       (_) => const LoginScreen(), 
         '/home':        (_) => const MainShell(),
         '/passport':    (_) => const PassportScreen(),
         '/challenges':  (_) => const ChallengesScreen(),
