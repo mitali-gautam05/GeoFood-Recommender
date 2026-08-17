@@ -33,3 +33,4 @@ build/
 *.log
 *_log.txt
 error_log.txt
+backend/model_artifacts/rag/chroma_store/
