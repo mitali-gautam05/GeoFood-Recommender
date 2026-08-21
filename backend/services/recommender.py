@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import math
 import logging
+from services.rag_engine import get_semantic_scores
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +338,9 @@ def recommend(
             "recommendations": [],
         }
 
-    city_df = df[df["city"] == city_matched].copy().reset_index(drop=True)
+    city_df = df[df["city"] == city_matched].copy()
+    city_df["rag_id"] = city_df.index.astype(str)
+    city_df = city_df.reset_index(drop=True)
 
     # ── Rating filter ─────────────────────────────────────────────────────────
     filtered = city_df[city_df["rating"] >= min_rating]
@@ -347,6 +350,10 @@ def recommend(
     city_tfidf           = tfidf.transform(city_df["tfidf_text"].fillna(""))
     query_vec            = tfidf.transform([query.lower()])
     city_df["sim_score"] = cosine_similarity(query_vec, city_tfidf).flatten()
+    semantic_scores = get_semantic_scores(query, city_matched, top_k=200)
+    city_df["semantic_score"] = city_df["rag_id"].map(semantic_scores).fillna(0.0)
+    city_df["sim_score"] = 0.5 * city_df["sim_score"] + 0.5 * city_df["semantic_score"]
+
 
     strong = city_df[city_df["sim_score"] >= 0.05]
     if len(strong) >= 5:
