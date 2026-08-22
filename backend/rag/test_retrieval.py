@@ -25,6 +25,7 @@ def main():
         print("Run embed_index.py first to build the index.")
         return
 
+# Model is mutlilingual and can response in hinglish and english 
     model = TextEmbedding(model_name="intfloat/multilingual-e5-large")
     client = chromadb.PersistentClient(path=str(CHROMA_DIR))
     collection = client.get_collection(COLLECTION_NAME)
