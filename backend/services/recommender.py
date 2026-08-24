@@ -289,6 +289,8 @@ def recommend(
     time_slot:          Optional[str]  = None,   # overrides server-side hour detection
     weather_tags:       Optional[list] = None,
     avoid_cuisines:     Optional[list] = None,
+    budget_max: Optional[float] = None,      # NEW
+    cuisine: Optional[str] = None,
     # Internal recursion args
     _fallback_city:     str            = None,
     _fallback_distance: float          = None,
@@ -350,10 +352,10 @@ def recommend(
     city_tfidf           = tfidf.transform(city_df["tfidf_text"].fillna(""))
     query_vec            = tfidf.transform([query.lower()])
     city_df["sim_score"] = cosine_similarity(query_vec, city_tfidf).flatten()
-    semantic_scores = get_semantic_scores(query, city_matched, top_k=200)
+    semantic_scores, relaxed_notes = get_semantic_scores(
+    query, city_matched, budget_max=budget_max, cuisine=cuisine, top_k=200)
     city_df["semantic_score"] = city_df["rag_id"].map(semantic_scores).fillna(0.0)
     city_df["sim_score"] = 0.5 * city_df["sim_score"] + 0.5 * city_df["semantic_score"]
-
 
     strong = city_df[city_df["sim_score"] >= 0.05]
     if len(strong) >= 5:
@@ -478,6 +480,7 @@ def recommend(
         "matched_city":      city_matched,
         "fallback_from":     _fallback_city,
         "fallback_distance": _fallback_distance,
+        "relaxed_notes":      relaxed_notes, 
         "recommendations":   output,
     }
 
