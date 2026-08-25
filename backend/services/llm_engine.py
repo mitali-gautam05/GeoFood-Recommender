@@ -88,6 +88,91 @@ If a field isn't mentioned, use null. Always fill cleaned_query."""
         return {}
 
 
+async def resolve_followup(session_history: list, new_query: str) -> dict:
+    """
+    Decides whether new_query is a follow-up depending on prior context
+    (e.g. "cheaper option?" after "sasta biryani in mangalore") or a
+    genuinely new, self-contained query -- and if it IS a follow-up,
+    rewrites it into one resolved query carrying the full intent.
+
+    This does NOT do structured filter extraction itself -- the
+    resolved query still goes through parse_query() afterward like any
+    other query. Keeps this function single-purpose instead of
+    duplicating parse_query's schema, and keeps the "extra call for
+    follow-ups" to exactly one (this call), not two.
+
+    Fails soft: if classification fails, or there's no session history
+    yet, treats the query as NOT a follow-up -- the safest default. A
+    query left unresolved still works fine on its own; a wrongly
+    "resolved" query could silently distort what the user actually asked.
+    """
+    if not session_history:
+        return {"is_followup": False, "resolved_query": new_query, "city": None}
+
+    recent = session_history[-3:]  # last 3 turns is enough context, keeps the prompt small
+    history_lines = [
+        f'- "{turn.get("query", "")}" (city: {turn.get("city", "unknown")})'
+        for turn in recent
+    ]
+    history_block = "\n".join(history_lines)
+
+    system_prompt = """You are a conversation-context resolver for a restaurant search app.
+Given the recent conversation history and a new message, decide if the
+new message is a FOLLOW-UP that depends on the previous context (e.g.
+"cheaper option?", "what about vegetarian?", "same but in a different area"),
+or a genuinely NEW, self-contained query.
+
+If it IS a follow-up, rewrite it into one self-contained query carrying
+the full resolved intent, incorporating relevant context from history
+(cuisine, city, prior constraints) plus the new modification.
+
+If it is NOT a follow-up, resolved_query should just be the new message
+unchanged.
+
+CRITICAL: the new message's own words (its actual modification -- e.g.
+"cheaper", "vegetarian", "closer") must appear in resolved_query. Do NOT
+just return the previous query unchanged -- that silently drops what the
+user just asked for. resolved_query must reflect BOTH the old context
+AND the new change.
+
+Example:
+History: - "affordable biryani in mangalore" (city: mangalore)
+New message: "cheaper option?"
+Correct resolved_query: "cheaper biryani in mangalore, more affordable than before"
+WRONG resolved_query: "affordable biryani in mangalore" (this drops "cheaper" -- never do this)
+
+Respond ONLY with valid JSON, no preamble:
+{
+  "is_followup": boolean,
+  "resolved_query": string,
+  "city": string or null   // city to carry forward if this is a follow-up and city wasn't restated; null if not a follow-up or city was already explicit in the new message
+}"""
+
+    user_prompt = f'Recent conversation:\n{history_block}\n\nNew message: "{new_query}"'
+
+    try:
+        response = await _call_with_retry(lambda: client.chat.completions.create(
+            model=PARSE_MODEL,  # small/fast -- this is a lightweight classify+rewrite task
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        ))
+        raw = response.choices[0].message.content
+        result = json.loads(raw)
+        return {
+            "is_followup": bool(result.get("is_followup", False)),
+            "resolved_query": result.get("resolved_query") or new_query,
+            "city": result.get("city"),
+        }
+
+    except Exception as e:
+        logger.warning(f"Follow-up resolution failed, treating as new query: {e}")
+        return {"is_followup": False, "resolved_query": new_query, "city": None}
+
+
 async def explain_recommendations(user_query: str, results: list) -> dict:
     """
     Takes the original user query and the already-ranked list of restaurant
