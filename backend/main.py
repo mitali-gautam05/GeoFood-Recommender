@@ -9,13 +9,15 @@ from database import Base, engine
 from models import user, place
 from models.user_click    import UserClick
 from models.cached_result import CachedResult
-from models.passport      import PassportEntry        # ← Phase 3: new table
-from models.challenge     import ChallengeCompletion  # ← Phase 3: new table
+from models.passport      import PassportEntry        
+from models.challenge     import ChallengeCompletion 
 
 from routes.recommender import router as recommender_router
 from routes.auth        import router as auth_router
 from routes.places      import router as places_router
-from routes.social      import router as social_router  # ← Phase 3: now active
+from routes.social      import router as social_router  
+from routes.chat import router as chat_router
+from routes.converse import router as converse_router
 
 
 app = FastAPI(
@@ -43,6 +45,8 @@ app.include_router(auth_router,        prefix="/api/v1")
 app.include_router(places_router,      prefix="/api/v1")
 app.include_router(recommender_router, prefix="/api/v1", tags=["Recommender"])
 app.include_router(social_router,      prefix="/api/v1")  # ← Phase 3
+app.include_router(chat_router, prefix="/api/v1", tags=["Chat"])
+app.include_router(converse_router, prefix="/api/v1", tags=["Converse"])
 
 
 @app.get("/health")
