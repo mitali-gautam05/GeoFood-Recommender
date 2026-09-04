@@ -24,7 +24,7 @@ import logging
 from typing import Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 
-from services.recommender import recommend
+from services.recommender import recommend , record_click
 from services.llm_engine import parse_query, resolve_followup, explain_recommendations
 from services.session_store import get_session_history, append_turn
 
@@ -50,19 +50,79 @@ class ChatState(TypedDict, total=False):
     is_followup: bool
     parsed_filters: dict
     retry_count: int
+    intent: str
+    clicked_name: Optional[str]
     result: dict
 
 
 async def router_node(state: ChatState) -> dict:
     """Reads conversation history and resolves whether this is a
-    follow-up, carrying forward city/context if so."""
+    follow-up, carrying forward city/context if so. Also classifies
+    intent (search vs. a click/selection on a previously shown
+    restaurant) so the graph can route around parse/retrieve/explain
+    entirely for a click -- zero extra LLM calls, this reuses the same
+    resolve_followup() call that already ran for follow-up detection."""
     history = get_session_history(state["username"])
     followup = await resolve_followup(history, state["query"])
     return {
         "resolved_query": followup["resolved_query"],
         "is_followup": followup["is_followup"],
         "city": followup.get("city") or state["city"],
+        "intent": followup.get("intent", "search"),
+        "clicked_name": followup.get("clicked_name"),
     }
+
+
+def click_node(state: ChatState) -> dict:
+    """
+    Handles a click/selection follow-up (e.g. "the first one, love it")
+    without going through parse/retrieve/explain -- reuses the existing
+    PostgreSQL-backed record_click() (same function routes/recommender.py's
+    /click endpoint calls), just invoked directly instead of a second
+    HTTP round-trip.
+
+    record_click() tracks by cuisine/food_type, not restaurant name, so
+    clicked_name (from resolve_followup) is resolved against the
+    *previous* turn's stored results to find the matching cuisine --
+    the cuisine itself is never trusted from the LLM, only looked up
+    from data we already grounded in the prior recommend() call.
+    Fails soft: if no match is found (stale reference or a name the
+    model didn't actually see), returns a message instead of guessing.
+    """
+    clicked_name = state.get("clicked_name")
+    history = get_session_history(state["username"])
+    cuisine = None
+    matched_name = None
+    for turn in reversed(history):
+        for r in turn.get("results", []):
+            if r.get("name") == clicked_name:
+                cuisine = r.get("cuisine")
+                matched_name = r.get("name")
+                break
+        if cuisine:
+            break
+
+    if not cuisine:
+        result = {
+            "status": "click_unresolved",
+            "message": "Couldn't match that to a restaurant from the last results -- could you name it directly?",
+        }
+    else:
+        record_click(state["username"], cuisine, city=state.get("city"), db=state.get("db"))
+        result = {
+            "status": "click_recorded",
+            "clicked_name": matched_name,
+            "cuisine": cuisine,
+        }
+
+    append_turn(state["username"], {
+        "query": state["query"],
+        "resolved_query": state["resolved_query"],
+        "city": state["city"],
+        "results": [],  # a click turn doesn't produce new recommendations
+    })
+    result["is_followup"] = state.get("is_followup", False)
+    return {"result": result}
 
 
 async def parse_node(state: ChatState) -> dict:
@@ -139,13 +199,20 @@ async def explain_node(state: ChatState) -> dict:
 
 def finalize_node(state: ChatState) -> dict:
     """Persists this turn to session history and stamps whether it was
-    treated as a follow-up, then returns the final result."""
+    treated as a follow-up, then returns the final result. Also stores
+    each recommended restaurant's name + cuisine in the turn -- this is
+    what click_node looks up on a later "the first one" style turn."""
+    result = state["result"]
+    recs = result.get("recommendations", []) if isinstance(result, dict) else []
     append_turn(state["username"], {
         "query": state["query"],
         "resolved_query": state["resolved_query"],
         "city": state["city"],
+        "results": [
+            {"name": r.get("name"), "cuisine": r.get("cuisine")}
+            for r in recs
+        ],
     })
-    result = state["result"]
     result["is_followup"] = state.get("is_followup", False)
     return {"result": result}
 
@@ -153,6 +220,7 @@ def finalize_node(state: ChatState) -> dict:
 def build_chat_graph():
     graph = StateGraph(ChatState)
     graph.add_node("router", router_node)
+    graph.add_node("click", click_node)
     graph.add_node("parse", parse_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("bump_retry", bump_retry_node)
@@ -160,7 +228,12 @@ def build_chat_graph():
     graph.add_node("finalize", finalize_node)
 
     graph.add_edge(START, "router")
-    graph.add_edge("router", "parse")
+    graph.add_conditional_edges(
+        "router",
+        lambda state: "click" if state.get("intent") == "click" else "parse",
+        {"click": "click", "parse": "parse"},
+    )
+    graph.add_edge("click", END)
     graph.add_edge("parse", "retrieve")
     graph.add_conditional_edges("retrieve", should_retry, {"retry": "bump_retry", "continue": "explain"})
     graph.add_edge("bump_retry", "retrieve")
