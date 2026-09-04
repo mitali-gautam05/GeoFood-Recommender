@@ -110,10 +110,15 @@ async def resolve_followup(session_history: list, new_query: str) -> dict:
         return {"is_followup": False, "resolved_query": new_query, "city": None}
 
     recent = session_history[-3:]  # last 3 turns is enough context, keeps the prompt small
-    history_lines = [
-        f'- "{turn.get("query", "")}" (city: {turn.get("city", "unknown")})'
-        for turn in recent
-    ]
+    history_lines = []
+    for turn in recent:
+        line = f'- "{turn.get("query", "")}" (city: {turn.get("city", "unknown")})'
+        shown = turn.get("results") or []
+        if shown:
+            names = ", ".join(r.get("name", "") for r in shown if r.get("name"))
+            if names:
+                line += f"\n  Restaurants shown: {names}"
+        history_lines.append(line)
     history_block = "\n".join(history_lines)
 
     system_prompt = """You are a conversation-context resolver for a restaurant search app.
@@ -141,13 +146,28 @@ New message: "cheaper option?"
 Correct resolved_query: "cheaper biryani in mangalore, more affordable than before"
 WRONG resolved_query: "affordable biryani in mangalore" (this drops "cheaper" -- never do this)
 
+Additionally, decide the INTENT of the new message:
+- "click": the user is picking/liking/selecting ONE specific restaurant
+  from the "Restaurants shown" list in a prior turn (e.g. "the first one
+  sounds good", "I liked that one", "book that", "pehle wala theek hai").
+  Set clicked_name to the EXACT restaurant name as it appears in
+  "Restaurants shown" above -- do not paraphrase or guess a name that
+  wasn't shown.
+- "search": anything else, including a new search or a follow-up that
+  modifies search filters (cheaper, different cuisine, etc.) rather than
+  picking one specific restaurant.
+If intent is not "click", clicked_name must be null. If you cannot find
+an exact match for what the user is referring to in "Restaurants shown",
+default to intent "search" rather than guessing.
+
 Respond ONLY with valid JSON, no preamble:
 {
   "is_followup": boolean,
   "resolved_query": string,
-  "city": string or null   // city to carry forward if this is a follow-up and city wasn't restated; null if not a follow-up or city was already explicit in the new message
+  "city": string or null,   // city to carry forward if this is a follow-up and city wasn't restated; null if not a follow-up or city was already explicit in the new message
+  "intent": "search" or "click",
+  "clicked_name": string or null   // exact restaurant name from "Restaurants shown", only when intent is "click"
 }"""
-
     user_prompt = f'Recent conversation:\n{history_block}\n\nNew message: "{new_query}"'
 
     try:
@@ -162,15 +182,18 @@ Respond ONLY with valid JSON, no preamble:
         ))
         raw = response.choices[0].message.content
         result = json.loads(raw)
+        intent = result.get("intent") if result.get("intent") in ("search", "click") else "search"
         return {
             "is_followup": bool(result.get("is_followup", False)),
             "resolved_query": result.get("resolved_query") or new_query,
             "city": result.get("city"),
+            "intent": intent,
+            "clicked_name": result.get("clicked_name") if intent == "click" else None,
         }
 
     except Exception as e:
         logger.warning(f"Follow-up resolution failed, treating as new query: {e}")
-        return {"is_followup": False, "resolved_query": new_query, "city": None}
+        return {"is_followup": False, "resolved_query": new_query, "city": None, "intent": "search", "clicked_name": None}
 
 
 async def explain_recommendations(user_query: str, results: list) -> dict:
