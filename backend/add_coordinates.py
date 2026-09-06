@@ -9,7 +9,6 @@ print(f"Loaded {len(df)} restaurants across {df['city'].nunique()} cities")
 
 # Step 1: Get coordinates for each unique city (only 98 cities, not 33k rows)
 geolocator = Nominatim(user_agent="geotaste_ai_geocoder")
-
 city_coords = {}
 unique_cities = df['city'].unique()
 
