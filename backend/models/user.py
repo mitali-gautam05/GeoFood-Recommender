@@ -1,5 +1,4 @@
 # backend/models/user.py
-# Phase 4: added `city` column.
 # server_default='' means existing rows in PostgreSQL get an empty string
 # automatically — no manual migration needed if you use create_all().
 # If you use Alembic: alembic revision --autogenerate -m "add city to users"
