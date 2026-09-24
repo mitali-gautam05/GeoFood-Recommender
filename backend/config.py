@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int   = 60
     REDIS_URL:                   str   = "redis://localhost:6379/0"
     GROQ_API_KEY :               str
+    UNSPLASH_ACCESS_KEY:         str   = "" 
     class Config:
         env_file = Path(__file__).resolve().parent / ".env"
 
