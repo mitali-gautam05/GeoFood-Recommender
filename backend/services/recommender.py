@@ -19,6 +19,7 @@ from typing import Optional
 import math
 import logging
 from services.rag_engine import get_semantic_scores
+from services.image_service import get_cuisine_image_url
 
 logger = logging.getLogger(__name__)
 
@@ -472,6 +473,10 @@ def recommend(
             "popularity_norm":  round(float(row["popularity_norm"]), 3),
             "mood_boost":       round(float(row["mood_boost"]),      3),
             "weather_boost":    round(float(row["weather_boost"]),   3),
+            "image_url":        get_cuisine_image_url(row["food_type"]),
+            "lat":              float(row["lat"]) if pd.notna(row["lat"]) else None,
+             "lng":              float(row["lng"]) if pd.notna(row["lng"]) else None,
+
         })
 
     result = {
