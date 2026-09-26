@@ -298,6 +298,60 @@ class ApiClient {
     }
   }
 
+    // ── Conversational endpoint ──────────────────────────────────────
+
+  static Future<Map<String, dynamic>> converse({
+    required String username,
+    required String query,
+    required String city,
+    required double budget,
+    double?       userLat,
+    double?       userLng,
+    double        minRating     = 3.5,
+    int           topN          = 5,
+    String        hungerMode    = 'hungry',
+    String?       mood,
+    String?       timeSlot,
+    List<String>? weatherTags,
+    List<String>? avoidCuisines,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'username':    username,
+        'query':       query,
+        'city':        city,
+        'budget':      budget,
+        'min_rating':  minRating,
+        'top_n':       topN,
+        'hunger_mode': hungerMode,
+      };
+
+      if (userLat       != null) body['user_lat']       = userLat;
+      if (userLng       != null) body['user_lng']       = userLng;
+      if (mood          != null) body['mood']           = mood;
+      if (timeSlot      != null) body['time_slot']      = timeSlot;
+      if (weatherTags   != null && weatherTags.isNotEmpty)
+        body['weather_tags']   = weatherTags;
+      if (avoidCuisines != null && avoidCuisines.isNotEmpty)
+        body['avoid_cuisines'] = avoidCuisines;
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/converse'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 20)); // converse chains 2-3 LLM calls, needs more time than /recommend
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw ApiException('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Cannot connect to server. Is it running?');
+    }
+  }
+
   // ── Click recording ────────────────────────────────────────────────────────
 
   static Future<void> recordClick(String username, String foodType) async {
