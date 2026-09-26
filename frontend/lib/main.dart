@@ -30,7 +30,9 @@ import 'screens/home/challenges_screen.dart';
 import 'screens/home/leaderboard_screen.dart';
 import 'utils/app_theme.dart';
 import 'services/notification_service.dart';
+import 'screens/chat/chat_screen.dart';
 import 'services/api_client.dart';
+import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +49,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PlacesProvider()),
         ChangeNotifierProvider(create: (_) => FavouritesProvider()),
         ChangeNotifierProvider(create: (_) => GamificationProvider()..init()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()..init()),
       ],
       child: const GeoTasteApp(),
     ),
@@ -58,11 +61,12 @@ class GeoTasteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();  
     return MaterialApp(
       title:                      'GeoTaste',
       theme:                      AppTheme.lightTheme,
       darkTheme:                  AppTheme.darkTheme,
-      themeMode:                  ThemeMode.light, // ← always dark
+      themeMode: themeProvider.mode, 
       debugShowCheckedModeBanner: false,
       initialRoute: '/splash',
       routes: {
@@ -73,6 +77,7 @@ class GeoTasteApp extends StatelessWidget {
         '/passport':    (_) => const PassportScreen(),
         '/challenges':  (_) => const ChallengesScreen(),
         '/leaderboard': (_) => const LeaderboardScreen(),
+        '/chat': (_) => const ChatScreen(),
       },
     );
   }
