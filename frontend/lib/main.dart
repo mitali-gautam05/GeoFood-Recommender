@@ -1,9 +1,8 @@
 // lib/main.dart
-// ONLY CHANGE from your original:
-//   themeMode: ThemeMode.dark  (was ThemeMode.system)
-//   _navIndicatorColor() uses AppTheme.accent for Progress tab
-//   Bottom nav gets a top glass border
-// Everything else is identical.
+// THEME FIX: bottomNavigationBar's border used AppTheme.glassStroke, a
+// fixed translucent-WHITE color meant only for the dark theme. In light
+// mode this rendered wrong/invisible. Now it reads from the active
+// Theme's dividerColor instead, so it adapts with ThemeProvider.
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -61,18 +60,18 @@ class GeoTasteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();  
+    final themeProvider = context.watch<ThemeProvider>();
     return MaterialApp(
       title:                      'GeoTaste',
       theme:                      AppTheme.lightTheme,
       darkTheme:                  AppTheme.darkTheme,
-      themeMode: themeProvider.mode, 
+      themeMode:                  themeProvider.mode,
       debugShowCheckedModeBanner: false,
       initialRoute: '/splash',
       routes: {
         '/splash':      (_) => const SplashScreen(),
         '/onboarding':  (_) => const OnboardingScreen(),
-        '/login':       (_) => const LoginScreen(), 
+        '/login':       (_) => const LoginScreen(),
         '/home':        (_) => const MainShell(),
         '/passport':    (_) => const PassportScreen(),
         '/challenges':  (_) => const ChallengesScreen(),
@@ -154,10 +153,17 @@ class _MainShellState extends State<MainShell> {
       child: Scaffold(
         body: IndexedStack(index: _index, children: _screens),
         bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            color: AppTheme.bgCard,
+          // FIX: was `const BoxDecoration(color: Theme.of(context)....)`
+          // — Theme.of(context) can never be const, and the border below
+          // used to be AppTheme.glassStroke (a dark-theme-only white
+          // translucent color). Both are now theme-aware.
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
             border: Border(
-              top: BorderSide(color: AppTheme.glassStroke, width: 1),
+              top: BorderSide(
+                color: Theme.of(context).dividerColor,
+                width: 1,
+              ),
             ),
           ),
           child: NavigationBar(
