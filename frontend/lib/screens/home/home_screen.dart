@@ -29,9 +29,9 @@ import 'challenges_screen.dart';
 import 'leaderboard_screen.dart';
 // StreakBanner AND MoodChipRow both live in streak_widget.dart
 import '../../../widgets/streak_widget.dart';
-// WeatherRecommendationBanner lives in weather_recommendation_service.dart
-// MoodChipRow does NOT come from here
 import '../../../services/weather_recommendation_service.dart';
+import '../chat/chat_screen.dart';
+import '../../../providers/theme_provider.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -122,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PlacesProvider>();
+    final themeProvider = context.watch<ThemeProvider>();
     final hasFilters = provider.filters.cuisine != null ||
         provider.filters.minRating > 3.0 ||
         provider.filters.minBudget > 0 ||
@@ -177,6 +178,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             // Filter icon
+                        // Leaderboard shortcut (was imported but missing from AppBar — fixed)
+            // Chat shortcut — Phase 3 conversational search
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Ask GeoTaste',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChatScreen()),
+              ),
+            ),
+            // Filter icon
             Stack(
               children: [
                 IconButton(
@@ -204,6 +216,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             // Refresh icon
+            IconButton(
+                  icon: Icon(themeProvider.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+                  tooltip: themeProvider.isDark ? 'Switch to light' : 'Switch to dark',
+                  onPressed: () => themeProvider.toggle(),
+  ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh',
