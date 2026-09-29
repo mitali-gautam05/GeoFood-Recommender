@@ -34,6 +34,24 @@ class PlaceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
+if (place.imageUrl != null)
+  ClipRRect(
+    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+    child: Image.network(
+      place.imageUrl!,
+      height: 140,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : Container(height: 140, color: Colors.grey[200],
+              child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
+      errorBuilder: (context, error, stackTrace) => Container(
+        height: 140, color: Colors.grey[200],
+        child: const Icon(Icons.restaurant, size: 40, color: Colors.grey),
+      ),
+    ),
+  ),
               // ── Rank + Name + Score ─────────────────────────────────
               Row(
                 children: [
