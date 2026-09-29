@@ -21,6 +21,8 @@ class PlaceModel {
   // places_provider._checkAndNotify() uses these to calculate distance.
   final double? lat;
   final double? lng;
+  final String? imageUrl;
+
 
   PlaceModel({
     required this.name,
@@ -39,7 +41,10 @@ class PlaceModel {
     this.popularityNorm = 0,
     this.lat,   // NEW — optional, defaults to null
     this.lng,   // NEW — optional, defaults to null
+    this.imageUrl,
+
   });
+
 
   factory PlaceModel.fromJson(Map<String, dynamic> json) {
     return PlaceModel(
@@ -60,6 +65,7 @@ class PlaceModel {
       // NEW — parse lat/lng from API response if present
       lat:            (json['lat'] as num?)?.toDouble(),
       lng:            (json['lng'] as num?)?.toDouble(),
+      imageUrl: json['image_url'] as String?,
     );
   }
 
