@@ -1,9 +1,4 @@
 // lib/screens/home/passport_screen.dart
-// Phase 3 additions (UI is IDENTICAL — only data wiring changed):
-//   1. initState calls ApiClient.getPassport() and merges server
-//      counts with local cuisineClickMap — so progress survives logout.
-//   2. _serverCounts overlay merged on top of local counts in build().
-//   No visual changes — same grid, same animations, same filter row.
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -71,7 +66,6 @@ class _PassportScreenState extends State<PassportScreen>
   String? _justStamped;
   int _filterIndex = 0;
 
-  // ── Phase 3: server counts merged with local ──────────────
   Map<String, int> _serverCounts = {};
   bool _serverLoaded = false;
 
@@ -86,11 +80,9 @@ class _PassportScreenState extends State<PassportScreen>
       parent: _headerController,
       curve: Curves.easeOutCubic,
     );
-    // Phase 3: fetch server-side passport on open
     _loadServerPassport();
   }
 
-  // ── Phase 3: load server passport and merge with local ────
   Future<void> _loadServerPassport() async {
     final username = context.read<PlacesProvider>().userName;
     if (username.isEmpty) {
@@ -106,7 +98,6 @@ class _PassportScreenState extends State<PassportScreen>
     }
   }
 
-  // ── Merge local + server counts (take max of each) ────────
   Map<String, int> _mergedCounts(Map<String, int> local) {
     final merged = Map<String, int>.from(local);
     for (final entry in _serverCounts.entries) {
@@ -138,31 +129,32 @@ class _PassportScreenState extends State<PassportScreen>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PlacesProvider>();
-    // Phase 3: merge local + server so progress is never lost
     final seen     = _mergedCounts(provider.cuisineClickMap);
     final total    = kAllCuisines.length;
     final unlocked = kAllCuisines.where((c) => seen.containsKey(c['id'])).length;
     final pct      = (unlocked / total * 100).round();
     final filtered = _filteredCuisines(seen);
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: bg,
       body: CustomScrollView(
         slivers: [
 
           SliverAppBar(
             expandedHeight: 210,
             pinned: true,
-            backgroundColor: const Color(0xFF0D1117),
+            backgroundColor: bg,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white70),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: cs.onSurface.withOpacity(0.7)),
               onPressed: () => Navigator.pop(context),
             ),
-            title: const Text(
+            title: Text(
               'FOOD PASSPORT',
               style: TextStyle(
-                color: Colors.white, fontSize: 15,
+                color: cs.onSurface, fontSize: 15,
                 fontWeight: FontWeight.w700, letterSpacing: 3,
               ),
             ),
@@ -226,8 +218,10 @@ class _PassportScreenState extends State<PassportScreen>
   }
 }
 
-// ── All sub-widgets below are IDENTICAL to original ───────────
-
+// ── Passport header ────────────────────────────────────────────
+// NOTE: keeps its own dark gradient always — this is a hero/branding
+// banner (like a splash), intentionally not theme-reactive. If you'd
+// rather it flip with the theme too, say so and I'll adjust it.
 class _PassportHeader extends StatelessWidget {
   final int unlocked, total, pct;
   final Animation<double> anim;
@@ -332,6 +326,7 @@ class _StatsStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final totalVisits = seen.values.fold(0, (a, b) => a + b);
     final rareCount   = kAllCuisines
         .where((c) => _rarity(c['id']) == 'RARE' && seen.containsKey(c['id']))
@@ -341,18 +336,18 @@ class _StatsStrip extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161B27),
+        color: cs.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: cs.onSurface.withOpacity(0.07)),
       ),
       child: Row(
         children: [
           _Stat('$unlocked',    'Cuisines\nUnlocked', const Color(0xFFFF6B35)),
-          _vDivider(),
+          _vDivider(cs),
           _Stat('$totalVisits', 'Total\nVisits',      const Color(0xFF2ECC71)),
-          _vDivider(),
+          _vDivider(cs),
           _Stat('$rareCount',   'Rare\nFinds',        const Color(0xFF9C27B0)),
-          _vDivider(),
+          _vDivider(cs),
           _Stat(unlocked >= total ? '🏆' : '$pct%',
                 'Passport\nFilled',                   const Color(0xFFF39C12)),
         ],
@@ -360,9 +355,9 @@ class _StatsStrip extends StatelessWidget {
     );
   }
 
-  Widget _vDivider() => Container(
+  Widget _vDivider(ColorScheme cs) => Container(
     width: 1, height: 38,
-    color: Colors.white.withOpacity(0.08),
+    color: cs.onSurface.withOpacity(0.08),
   );
 }
 
@@ -372,18 +367,21 @@ class _Stat extends StatelessWidget {
   const _Stat(this.value, this.label, this.color);
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Column(
-      children: [
-        Text(value, style: TextStyle(
-          color: color, fontSize: 20, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 3),
-        Text(label, textAlign: TextAlign.center,
-          style: const TextStyle(
-              color: Colors.white38, fontSize: 10, height: 1.4)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(
+            color: color, fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(label, textAlign: TextAlign.center,
+            style: TextStyle(
+                color: cs.onSurface.withOpacity(0.38), fontSize: 10, height: 1.4)),
+        ],
+      ),
+    );
+  }
 }
 
 class _FilterRow extends StatelessWidget {
@@ -394,6 +392,7 @@ class _FilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return SizedBox(
       height: 48,
       child: ListView.separated(
@@ -409,14 +408,14 @@ class _FilterRow extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
-                color: active ? const Color(0xFFFF6B35) : const Color(0xFF161B27),
+                color: active ? const Color(0xFFFF6B35) : cs.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: active ? Colors.transparent : Colors.white12),
+                  color: active ? Colors.transparent : cs.onSurface.withOpacity(0.12)),
               ),
               child: Text(_labels[i],
                 style: TextStyle(
-                  color:      active ? Colors.white : Colors.white54,
+                  color:      active ? Colors.white : cs.onSurface.withOpacity(0.54),
                   fontSize:   13,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 )),
@@ -478,6 +477,7 @@ class _CuisineCardState extends State<_CuisineCard>
 
   @override
   Widget build(BuildContext context) {
+    final cs     = Theme.of(context).colorScheme;
     final c      = widget.cuisine;
     final color  = c['color']  as Color;
     final light  = c['light']  as Color;
@@ -489,12 +489,12 @@ class _CuisineCardState extends State<_CuisineCard>
         scale: widget.isNew ? _scale.value : 1.0,
         child: Container(
           decoration: BoxDecoration(
-            color: widget.isUnlocked ? light : const Color(0xFF161B27),
+            color: widget.isUnlocked ? light : cs.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: widget.isUnlocked
                   ? color.withOpacity(0.4)
-                  : Colors.white.withOpacity(0.06),
+                  : cs.onSurface.withOpacity(0.06),
               width: widget.isUnlocked ? 1.5 : 1,
             ),
             boxShadow: widget.isUnlocked
@@ -515,24 +515,27 @@ class _CuisineCardState extends State<_CuisineCard>
                       decoration: BoxDecoration(
                         color: widget.isUnlocked
                             ? color.withOpacity(0.15)
-                            : Colors.white.withOpacity(0.04),
+                            : cs.onSurface.withOpacity(0.04),
                         shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: widget.isUnlocked
                             ? Text(c['emoji'] as String,
                                 style: const TextStyle(fontSize: 24))
-                            : const Icon(Icons.lock_outline_rounded,
-                                color: Colors.white24, size: 20),
+                            : Icon(Icons.lock_outline_rounded,
+                                color: cs.onSurface.withOpacity(0.24), size: 20),
                       ),
                     ),
                     const SizedBox(height: 7),
+                    // NOTE: unlocked-card text stays dark (0xFF1A1A1A) because
+                    // the 'light' background color is always pastel-light,
+                    // even in dark mode — that's intentional per-cuisine styling.
                     Text(c['name'] as String,
                       textAlign: TextAlign.center, maxLines: 2,
                       style: TextStyle(
                         color: widget.isUnlocked
                             ? const Color(0xFF1A1A1A)
-                            : Colors.white30,
+                            : cs.onSurface.withOpacity(0.3),
                         fontSize: 11, fontWeight: FontWeight.w600,
                         height: 1.3,
                       )),
