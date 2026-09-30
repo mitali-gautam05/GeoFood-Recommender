@@ -13,19 +13,21 @@ class GamificationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final gami   = context.watch<GamificationProvider>();
     final places = context.watch<PlacesProvider>();
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111318),
+      backgroundColor: bg,
       body: CustomScrollView(
         slivers: [
 
           SliverAppBar(
-            backgroundColor: const Color(0xFF111318),
+            backgroundColor: bg,
             pinned:          true,
             expandedHeight:  0,
-            title: const Text('Progress',
+            title: Text('Progress',
               style: TextStyle(
-                color: Colors.white, fontSize: 20,
+                color: cs.onSurface, fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -41,9 +43,9 @@ class GamificationScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
               child: Row(
                 children: [
-                  const Text('Badges',
+                  Text('Badges',
                     style: TextStyle(
-                      color: Colors.white, fontSize: 18,
+                      color: cs.onSurface, fontSize: 18,
                       fontWeight: FontWeight.w700,
                     )),
                   const SizedBox(width: 8),
@@ -93,7 +95,7 @@ class GamificationScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
                 child: Text('Keep exploring to unlock',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4), fontSize: 13,
+                    color: cs.onSurface.withOpacity(0.4), fontSize: 13,
                   )),
               ),
             ),
@@ -131,11 +133,12 @@ class _LevelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       margin:  const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color:        const Color(0xFF1C2030),
+        color:        cs.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
             color: const Color(0xFF7F77DD).withOpacity(0.3)),
@@ -152,8 +155,8 @@ class _LevelCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 )),
               Text('${gami.xp} XP',
-                style: const TextStyle(
-                  color: Colors.white60, fontSize: 14,
+                style: TextStyle(
+                  color: cs.onSurface.withOpacity(0.6), fontSize: 14,
                 )),
             ],
           ),
@@ -162,7 +165,7 @@ class _LevelCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value:           gami.progress,
-              backgroundColor: Colors.white.withOpacity(0.08),
+              backgroundColor: cs.onSurface.withOpacity(0.08),
               valueColor:
                   const AlwaysStoppedAnimation(Color(0xFF7F77DD)),
               minHeight: 8,
@@ -171,7 +174,7 @@ class _LevelCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text('${gami.nextLevelXp - gami.xp} XP to next level',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.4), fontSize: 12,
+              color: cs.onSurface.withOpacity(0.4), fontSize: 12,
             )),
         ],
       ),
@@ -207,31 +210,34 @@ class _StatBox extends StatelessWidget {
   const _StatBox(this.emoji, this.value, this.label);
 
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color:        const Color(0xFF1C2030),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 26)),
-              const SizedBox(height: 6),
-              Text(value,
-                style: const TextStyle(
-                  color: Colors.white, fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                )),
-              const SizedBox(height: 2),
-              Text(label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.4), fontSize: 11,
-                )),
-            ],
-          ),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color:        cs.surface,
+          borderRadius: BorderRadius.circular(16),
         ),
-      );
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 26)),
+            const SizedBox(height: 6),
+            Text(value,
+              style: TextStyle(
+                color: cs.onSurface, fontSize: 20,
+                fontWeight: FontWeight.w800,
+              )),
+            const SizedBox(height: 2),
+            Text(label,
+              style: TextStyle(
+                color: cs.onSurface.withOpacity(0.4), fontSize: 11,
+              )),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Taste score card ──────────────────────────────────────────
@@ -241,14 +247,15 @@ class _TasteScoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final score = gami.tasteScore;
     return Container(
       margin:  const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color:        const Color(0xFF1C2030),
+        color:        cs.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: cs.onSurface.withOpacity(0.06)),
       ),
       child: Row(
         children: [
@@ -259,14 +266,14 @@ class _TasteScoreCard extends StatelessWidget {
               children: [
                 CircularProgressIndicator(
                   value:           score / 100,
-                  backgroundColor: Colors.white.withOpacity(0.08),
+                  backgroundColor: cs.onSurface.withOpacity(0.08),
                   valueColor:
                       const AlwaysStoppedAnimation(Color(0xFF2ECC71)),
                   strokeWidth: 6,
                 ),
                 Text(score.round().toString(),
-                  style: const TextStyle(
-                    color: Colors.white, fontSize: 16,
+                  style: TextStyle(
+                    color: cs.onSurface, fontSize: 16,
                     fontWeight: FontWeight.w800,
                   )),
               ],
@@ -277,15 +284,15 @@ class _TasteScoreCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Taste Score',
+                Text('Taste Score',
                   style: TextStyle(
-                    color: Colors.white, fontSize: 15,
+                    color: cs.onSurface, fontSize: 15,
                     fontWeight: FontWeight.w700,
                   )),
                 const SizedBox(height: 4),
                 Text(_scoreLabel(score),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.45), fontSize: 12,
+                    color: cs.onSurface.withOpacity(0.45), fontSize: 12,
                   )),
               ],
             ),
@@ -305,7 +312,6 @@ class _TasteScoreCard extends StatelessWidget {
 }
 
 // ── Badge card ────────────────────────────────────────────────
-// BadgeDefinition fields: id, emoji, title, description, unlockHint
 class _BadgeCard extends StatelessWidget {
   final BadgeDefinition badge;
   final bool            unlocked;
@@ -313,16 +319,17 @@ class _BadgeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         color: unlocked
-            ? const Color(0xFF1C2030)
-            : const Color(0xFF161820),
+            ? cs.surface
+            : cs.surface.withOpacity(0.6),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: unlocked
               ? const Color(0xFF7F77DD).withOpacity(0.3)
-              : Colors.white.withOpacity(0.05),
+              : cs.onSurface.withOpacity(0.05),
         ),
       ),
       child: Column(
@@ -337,21 +344,19 @@ class _BadgeCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text(
-              // FIX: badge.title  (not .label, not .name — BadgeDefinition has .title)
               badge.title,
               textAlign: TextAlign.center,
               maxLines:  2,
               style: TextStyle(
                 color: unlocked
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.25),
+                    ? cs.onSurface
+                    : cs.onSurface.withOpacity(0.25),
                 fontSize:   10,
                 fontWeight: FontWeight.w600,
                 height:     1.3,
               ),
             ),
           ),
-          // Show unlock hint on locked badges
           if (!unlocked) ...[
             const SizedBox(height: 4),
             Padding(
@@ -361,7 +366,7 @@ class _BadgeCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines:  2,
                 style: TextStyle(
-                  color:    Colors.white.withOpacity(0.2),
+                  color:    cs.onSurface.withOpacity(0.2),
                   fontSize: 8,
                   height:   1.3,
                 ),
