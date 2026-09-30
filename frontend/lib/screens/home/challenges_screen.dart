@@ -1,8 +1,4 @@
 // lib/screens/home/challenges_screen.dart
-// CHANGES from previous version:
-//   • _claimReward() now also calls ApiClient.reportChallengeComplete()
-//     so XP is persisted to backend and shows on leaderboard
-//   • city is passed from PlacesProvider so backend can bucket by city
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -166,10 +162,8 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
     final username = places.userName;
     final city     = places.currentCity;
 
-    // 1. Award XP locally (GamificationProvider)
     await gami.trackAction(action: GamificationAction.nearbyVisited);
 
-    // 2. Persist to backend (fire-and-forget — never blocks UI)
     ApiClient.reportChallengeComplete(
       username:    username,
       challengeId: challenge.id,
@@ -177,7 +171,6 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
       city:        city,
     );
 
-    // 3. Mark as completed locally
     setState(() => _completedIds.add(challenge.id));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_weekKey, jsonEncode(_completedIds.toList()));
@@ -208,21 +201,23 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
   @override
   Widget build(BuildContext context) {
     final clickMap = context.watch<PlacesProvider>().cuisineClickMap;
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1117),
+        backgroundColor: bg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white70),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: cs.onSurface.withOpacity(0.7)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'WEEKLY CHALLENGES',
           style: TextStyle(
-            color: Colors.white, fontSize: 15,
+            color: cs.onSurface, fontSize: 15,
             fontWeight: FontWeight.w700, letterSpacing: 2.5,
           ),
         ),
@@ -283,16 +278,16 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
                               children: [
                                 Text(
                                   '${_completedIds.length}/${_challenges.length} this week',
-                                  style: const TextStyle(
-                                    color: Colors.white, fontSize: 16,
+                                  style: TextStyle(
+                                    color: cs.onSurface, fontSize: 16,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
-                                const Text(
+                                Text(
                                   'Complete all challenges for a bonus 🏅',
                                   style: TextStyle(
-                                      color: Colors.white38,
+                                      color: cs.onSurface.withOpacity(0.38),
                                       fontSize: 12),
                                 ),
                               ],
@@ -318,25 +313,28 @@ class _ResetTimer extends StatelessWidget {
   const _ResetTimer({required this.daysLeft});
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.timer_outlined,
-                color: Colors.white30, size: 16),
-            const SizedBox(width: 8),
-            Text(
-              'Challenges reset in $daysLeft day${daysLeft == 1 ? '' : 's'} • Monday midnight',
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.onSurface.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined,
+              color: cs.onSurface.withOpacity(0.3), size: 16),
+          const SizedBox(width: 8),
+          Text(
+            'Challenges reset in $daysLeft day${daysLeft == 1 ? '' : 's'} • Monday midnight',
+            style: TextStyle(color: cs.onSurface.withOpacity(0.38), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Challenge card ────────────────────────────────────────────────────────────
@@ -355,6 +353,7 @@ class _ChallengeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs     = Theme.of(context).colorScheme;
     final pct    = (progress / challenge.targetCount).clamp(0.0, 1.0);
     final color  = challenge.color;
     final isDone = progress >= challenge.targetCount;
@@ -362,14 +361,14 @@ class _ChallengeCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161B27),
+        color: cs.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: completed
-              ? Colors.white12
+              ? cs.onSurface.withOpacity(0.12)
               : isDone
                   ? color.withOpacity(0.5)
-                  : Colors.white.withOpacity(0.06),
+                  : cs.onSurface.withOpacity(0.06),
           width: isDone && !completed ? 1.5 : 1,
         ),
       ),
@@ -388,14 +387,14 @@ class _ChallengeCard extends StatelessWidget {
                     Text(challenge.title,
                         style: TextStyle(
                           color: completed
-                              ? Colors.white30
-                              : Colors.white,
+                              ? cs.onSurface.withOpacity(0.3)
+                              : cs.onSurface,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         )),
                     Text(challenge.description,
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 12)),
+                        style: TextStyle(
+                            color: cs.onSurface.withOpacity(0.38), fontSize: 12)),
                   ],
                 ),
               ),
@@ -415,8 +414,8 @@ class _ChallengeCard extends StatelessWidget {
                           fontWeight: FontWeight.w700)),
                 )
               else
-                const Icon(Icons.check_circle_rounded,
-                    color: Colors.white24, size: 24),
+                Icon(Icons.check_circle_rounded,
+                    color: cs.onSurface.withOpacity(0.24), size: 24),
             ],
           ),
           const SizedBox(height: 14),
@@ -427,9 +426,9 @@ class _ChallengeCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value:           completed ? 1.0 : pct,
-                    backgroundColor: Colors.white.withOpacity(0.06),
+                    backgroundColor: cs.onSurface.withOpacity(0.06),
                     valueColor:      AlwaysStoppedAnimation(
-                        completed ? Colors.white24 : color),
+                        completed ? cs.onSurface.withOpacity(0.24) : color),
                     minHeight: 6,
                   ),
                 ),
@@ -440,7 +439,7 @@ class _ChallengeCard extends StatelessWidget {
                     ? 'Done!'
                     : '$progress / ${challenge.targetCount}',
                 style: TextStyle(
-                  color: completed ? Colors.white24 : color,
+                  color: completed ? cs.onSurface.withOpacity(0.24) : color,
                   fontSize: 12, fontWeight: FontWeight.w600,
                 ),
               ),
@@ -479,12 +478,13 @@ class _RewardDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color:        const Color(0xFF161B27),
+          color:        cs.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
               color: challenge.color.withOpacity(0.4), width: 1.5),
@@ -500,9 +500,9 @@ class _RewardDialog extends StatelessWidget {
             Text(challenge.emoji,
                 style: const TextStyle(fontSize: 52)),
             const SizedBox(height: 12),
-            const Text('Challenge Complete!',
+            Text('Challenge Complete!',
                 style: TextStyle(
-                    color: Colors.white, fontSize: 20,
+                    color: cs.onSurface, fontSize: 20,
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             Text(challenge.title,
@@ -528,13 +528,13 @@ class _RewardDialog extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color:        Colors.white.withOpacity(0.08),
+                  color:        cs.onSurface.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('Nice! 🚀',
+                child: Text('Nice! 🚀',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        color: Colors.white,
+                        color: cs.onSurface,
                         fontWeight: FontWeight.w600)),
               ),
             ),
