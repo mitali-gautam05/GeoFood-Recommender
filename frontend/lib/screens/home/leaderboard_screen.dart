@@ -1,9 +1,4 @@
 // lib/screens/home/leaderboard_screen.dart
-// CHANGES from previous version:
-//   • Fetches real data from /api/v1/leaderboard via ApiClient.getLeaderboard()
-//   • Falls back to mock data when backend returns empty (no clicks yet)
-//   • Shows "Live" badge when using real data, "Demo" when using mock
-//   • my_entry from backend drives the rank pin (no hardcoded rank 23)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -94,7 +89,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final city     = provider.currentCity;
     final me       = provider.userName;
 
-    // Try real backend first
     final result = await ApiClient.getLeaderboard(
       city:     city,
       username: me,
@@ -103,7 +97,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     if (!mounted) return;
 
     if (!result.isEmpty && result.entries.isNotEmpty) {
-      // ── Real data ─────────────────────────────────────────
       setState(() {
         _entries    = result.entries.map((e) => _fromApi(e, me)).toList();
         _myEntry    = result.myEntry != null
@@ -113,8 +106,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         _loading    = false;
       });
     } else {
-      // ── Mock fallback ─────────────────────────────────────
-      // Small delay so the spinner feels intentional
       await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       setState(() {
@@ -135,14 +126,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   @override
   Widget build(BuildContext context) {
     final city = context.read<PlacesProvider>().currentCity;
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1117),
+        backgroundColor: bg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface.withOpacity(0.7)),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -150,20 +143,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('LEADERBOARD',
+                Text('LEADERBOARD',
                     style: TextStyle(
-                      color: Colors.white, fontSize: 14,
+                      color: cs.onSurface, fontSize: 14,
                       fontWeight: FontWeight.w700, letterSpacing: 2,
                     )),
                 const SizedBox(width: 6),
-                // Live / Demo badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: _isLiveData
                         ? const Color(0xFF2ECC71).withOpacity(0.18)
-                        : Colors.white.withOpacity(0.08),
+                        : cs.onSurface.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -171,7 +163,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     style: TextStyle(
                       color: _isLiveData
                           ? const Color(0xFF2ECC71)
-                          : Colors.white38,
+                          : cs.onSurface.withOpacity(0.38),
                       fontSize: 9, fontWeight: FontWeight.w700,
                       letterSpacing: 1,
                     ),
@@ -180,8 +172,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               ],
             ),
             Text(city.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white38, fontSize: 11, letterSpacing: 1.5,
+                style: TextStyle(
+                  color: cs.onSurface.withOpacity(0.38), fontSize: 11, letterSpacing: 1.5,
                 )),
           ],
         ),
@@ -190,7 +182,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           controller: _tabs,
           indicatorColor:       const Color(0xFFFF6B35),
           labelColor:           const Color(0xFFFF6B35),
-          unselectedLabelColor: Colors.white38,
+          unselectedLabelColor: cs.onSurface.withOpacity(0.38),
           labelStyle: const TextStyle(
               fontSize: 13, fontWeight: FontWeight.w600),
           tabs: const [Tab(text: 'This Week'), Tab(text: 'All Time')],
@@ -219,25 +211,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   Widget _buildList({required bool weekly}) {
-    final top3 = _entries.take(3).toList();
-    final rest = _entries.skip(3).take(12).toList();
+    final cs = Theme.of(context).colorScheme;
+    final hasFullPodium = _entries.length >= 3;
+    final top3 = hasFullPodium ? _entries.take(3).toList() : <_LeaderEntry>[];
+    final rest = hasFullPodium ? _entries.skip(3).take(12).toList() : _entries;
 
     return ListView(
       padding: EdgeInsets.only(
         bottom: _myEntry != null && _myEntry!.rank > 10 ? 80 : 16,
       ),
       children: [
-        if (top3.length >= 3) _Podium(top3: top3, weekly: weekly),
+        if (hasFullPodium) _Podium(top3: top3, weekly: weekly),
         const SizedBox(height: 8),
         ...rest.map((e) => _LeaderRow(entry: e, weekly: weekly)),
-        // Demo note when using mock data
         if (!_isLiveData)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: Text(
               'Leaderboard fills up as people explore restaurants in ${ context.read<PlacesProvider>().currentCity}.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white24, fontSize: 12),
+              style: TextStyle(color: cs.onSurface.withOpacity(0.24), fontSize: 12),
             ),
           ),
       ],
@@ -253,16 +246,14 @@ class _Podium extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [Color(0xFF161B27), Color(0xFF1A1F2E)],
-        ),
+        color: cs.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: cs.onSurface.withOpacity(0.06)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -293,6 +284,7 @@ class _PodiumItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final color = _colors[entry.rank - 1];
     final xp    = weekly ? entry.weeklyXp : entry.totalXp;
     return Column(
@@ -318,8 +310,8 @@ class _PodiumItem extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(entry.username.split(' ')[0],
-            style: const TextStyle(
-                color: Colors.white70, fontSize: 11,
+            style: TextStyle(
+                color: cs.onSurface.withOpacity(0.7), fontSize: 11,
                 fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
         Text('${(xp / 1000).toStringAsFixed(1)}k XP',
@@ -349,7 +341,6 @@ class _LeaderRow extends StatelessWidget {
   final bool weekly;
   const _LeaderRow({required this.entry, required this.weekly});
 
-  // Build badge emojis from badgeCount
   String get _badgeStr {
     const emojis = ['🏆','🔥','⭐','💎','🌍','🎯','🥇','🍛'];
     return emojis.take(entry.badgeCount).join(' ');
@@ -357,6 +348,7 @@ class _LeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final xp = weekly ? entry.weeklyXp : entry.totalXp;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -365,12 +357,12 @@ class _LeaderRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: entry.isYou
             ? const Color(0xFFFF6B35).withOpacity(0.1)
-            : const Color(0xFF161B27),
+            : cs.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: entry.isYou
               ? const Color(0xFFFF6B35).withOpacity(0.4)
-              : Colors.white.withOpacity(0.05),
+              : cs.onSurface.withOpacity(0.05),
           width: entry.isYou ? 1.5 : 1,
         ),
       ),
@@ -382,7 +374,7 @@ class _LeaderRow extends StatelessWidget {
                 style: TextStyle(
                   color: entry.isYou
                       ? const Color(0xFFFF6B35)
-                      : Colors.white30,
+                      : cs.onSurface.withOpacity(0.3),
                   fontSize: 13, fontWeight: FontWeight.w700,
                 )),
           ),
@@ -391,7 +383,7 @@ class _LeaderRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: (entry.isYou
                   ? const Color(0xFFFF6B35)
-                  : Colors.white).withOpacity(0.1),
+                  : cs.onSurface).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -399,7 +391,7 @@ class _LeaderRow extends StatelessWidget {
                   style: TextStyle(
                     color: entry.isYou
                         ? const Color(0xFFFF6B35)
-                        : Colors.white60,
+                        : cs.onSurface.withOpacity(0.6),
                     fontWeight: FontWeight.w700, fontSize: 14,
                   )),
             ),
@@ -414,7 +406,7 @@ class _LeaderRow extends StatelessWidget {
                   style: TextStyle(
                     color: entry.isYou
                         ? const Color(0xFFFF6B35)
-                        : Colors.white,
+                        : cs.onSurface,
                     fontSize: 13, fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -428,12 +420,12 @@ class _LeaderRow extends StatelessWidget {
               style: TextStyle(
                 color: entry.isYou
                     ? const Color(0xFFFF6B35)
-                    : Colors.white60,
+                    : cs.onSurface.withOpacity(0.6),
                 fontSize: 14, fontWeight: FontWeight.w700,
               )),
           const SizedBox(width: 4),
-          const Text('XP',
-              style: TextStyle(color: Colors.white24, fontSize: 10)),
+          Text('XP',
+              style: TextStyle(color: cs.onSurface.withOpacity(0.24), fontSize: 10)),
         ],
       ),
     );
@@ -447,11 +439,12 @@ class _MyRankPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       margin:  const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:        const Color(0xFF1A0D00),
+        color:        cs.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: const Color(0xFFFF6B35).withOpacity(0.5)),
@@ -463,8 +456,8 @@ class _MyRankPin extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Text('📍 Your rank',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Text('📍 Your rank',
+              style: TextStyle(color: cs.onSurface.withOpacity(0.54), fontSize: 12)),
           const Spacer(),
           Text('#${entry.rank}',
               style: const TextStyle(
@@ -473,8 +466,8 @@ class _MyRankPin extends StatelessWidget {
               )),
           const SizedBox(width: 12),
           Text('${entry.weeklyXp} XP this week',
-              style: const TextStyle(
-                  color: Colors.white38, fontSize: 12)),
+              style: TextStyle(
+                  color: cs.onSurface.withOpacity(0.38), fontSize: 12)),
         ],
       ),
     );
