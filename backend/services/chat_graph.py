@@ -3,15 +3,19 @@ services/chat_graph.py
 
 Phase 3: LangGraph state machine for the conversational flow.
 
-    START -> router -> parse -> retrieve -> [conditional]
-                                    |              |
-                              (empty results,   (has results,
-                               retries < 1)      or out of retries)
-                                    |              |
-                                    v              v
-                               bump_retry      explain -> finalize -> END
-                                    |
-                                    +--> back to retrieve (widened filters)
+    START -> router -> [conditional on intent]
+                 |
+                 +-- smalltalk -> smalltalk -> END           (NEW: hello/thanks/bye/help)
+                 +-- click     -> click -> END
+                 +-- search    -> parse -> retrieve -> [conditional]
+                                                  |              |
+                                            (empty results,   (has results,
+                                             retries < 1)      or out of retries)
+                                                  |              |
+                                                  v              v
+                                             bump_retry      explain -> finalize -> END
+                                                  |
+                                                  +--> back to retrieve (widened filters)
 
 Unlike Phase 2's chat_orchestrator.py (a straight-line pipeline), this
 adds real state (conversation history via session_store) and a genuine
@@ -24,9 +28,10 @@ import logging
 from typing import Optional, TypedDict
 from langgraph.graph import StateGraph, START, END
 
-from services.recommender import recommend , record_click
+from services.recommender import recommend, record_click
 from services.llm_engine import parse_query, resolve_followup, explain_recommendations
 from services.session_store import get_session_history, append_turn
+from services.smalltalk import detect_smalltalk, smalltalk_reply
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +56,30 @@ class ChatState(TypedDict, total=False):
     parsed_filters: dict
     retry_count: int
     intent: str
+    smalltalk_kind: Optional[str]
     clicked_name: Optional[str]
     result: dict
 
 
 async def router_node(state: ChatState) -> dict:
-    """Reads conversation history and resolves whether this is a
-    follow-up, carrying forward city/context if so. Also classifies
-    intent (search vs. a click/selection on a previously shown
-    restaurant) so the graph can route around parse/retrieve/explain
-    entirely for a click -- zero extra LLM calls, this reuses the same
-    resolve_followup() call that already ran for follow-up detection."""
+    """First checks for pure small talk (hello / thanks / bye / help) with a
+    cheap rule-based detector -- no LLM call, no history lookup -- and
+    short-circuits the graph if it matches. Otherwise reads conversation
+    history and resolves whether this is a follow-up, carrying forward
+    city/context if so. Also classifies intent (search vs. a click/selection
+    on a previously shown restaurant) so the graph can route around
+    parse/retrieve/explain entirely for a click -- zero extra LLM calls,
+    this reuses the same resolve_followup() call that already ran for
+    follow-up detection."""
+    kind = detect_smalltalk(state["query"])
+    if kind:
+        return {
+            "intent": "smalltalk",
+            "smalltalk_kind": kind,
+            "resolved_query": state["query"],
+            "is_followup": False,
+        }
+
     history = get_session_history(state["username"])
     followup = await resolve_followup(history, state["query"])
     return {
@@ -70,6 +88,22 @@ async def router_node(state: ChatState) -> dict:
         "city": followup.get("city") or state["city"],
         "intent": followup.get("intent", "search"),
         "clicked_name": followup.get("clicked_name"),
+    }
+
+
+def smalltalk_node(state: ChatState) -> dict:
+    """Answers a greeting/thanks/bye/help directly. Deliberately does NOT
+    call append_turn(): a "hello" turn has no results, and writing it to
+    history could make a later "the first one" / "cheaper ones" follow-up
+    resolve against an empty turn instead of the last real recommendations."""
+    kind = state.get("smalltalk_kind") or "greeting"
+    return {
+        "result": {
+            "status": "smalltalk",
+            "message": smalltalk_reply(kind, state.get("city")),
+            "recommendations": [],
+            "is_followup": False,
+        }
     }
 
 
@@ -217,9 +251,19 @@ def finalize_node(state: ChatState) -> dict:
     return {"result": result}
 
 
+def route_after_router(state: ChatState) -> str:
+    intent = state.get("intent")
+    if intent == "smalltalk":
+        return "smalltalk"
+    if intent == "click":
+        return "click"
+    return "parse"
+
+
 def build_chat_graph():
     graph = StateGraph(ChatState)
     graph.add_node("router", router_node)
+    graph.add_node("smalltalk", smalltalk_node)
     graph.add_node("click", click_node)
     graph.add_node("parse", parse_node)
     graph.add_node("retrieve", retrieve_node)
@@ -230,9 +274,10 @@ def build_chat_graph():
     graph.add_edge(START, "router")
     graph.add_conditional_edges(
         "router",
-        lambda state: "click" if state.get("intent") == "click" else "parse",
-        {"click": "click", "parse": "parse"},
+        route_after_router,
+        {"smalltalk": "smalltalk", "click": "click", "parse": "parse"},
     )
+    graph.add_edge("smalltalk", END)
     graph.add_edge("click", END)
     graph.add_edge("parse", "retrieve")
     graph.add_conditional_edges("retrieve", should_retry, {"retry": "bump_retry", "continue": "explain"})
