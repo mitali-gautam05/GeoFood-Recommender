@@ -210,10 +210,25 @@ class PlacesProvider extends ChangeNotifier {
     });
   }
 
+  // FIX (nearby-banner distance bug):
+  // Previously this always took rawList.first (the top-scoring restaurant
+  // for the *selected city*, e.g. Mumbai) and labeled it "nearby" no matter
+  // how far it actually was from the user's real GPS position — producing
+  // banners like "Nearby now — 966.8km away". There was also a silent
+  // `best.lat ?? userLat!` fallback that could fake a false "0km away" when
+  // coordinates were missing.
+  //
+  // Now: only restaurants within `maxNearbyKm` of the user's real location,
+  // and with real coordinates, are eligible. We scan a few candidates
+  // (topN: 5) instead of just the single best match, and pick the closest
+  // one that qualifies. If nothing qualifies, the banner is hidden entirely
+  // instead of showing a misleadingly large distance.
   Future<void> _checkAndNotify() async {
     if (_pauseManager.isPaused) return;
     if (userLat == null || userLng == null) return;
     if (_userName.isEmpty) return;
+
+    const double maxNearbyKm = 5.0; // only treat restaurants within 5km as "nearby"
 
     try {
       final result = await ApiClient.getRecommendations(
@@ -223,7 +238,7 @@ class PlacesProvider extends ChangeNotifier {
         budget:   budget,
         userLat:  userLat,
         userLng:  userLng,
-        topN:     1,
+        topN:     5, // check a few candidates, not just the single best match
       );
 
       if (result['status'] == 'city_not_found') return;
@@ -231,11 +246,27 @@ class PlacesProvider extends ChangeNotifier {
       final rawList = result['places'] as List<PlaceModel>? ?? [];
       if (rawList.isEmpty) return;
 
-      final best = rawList.first;
-      final dist = LocationService.distanceKm(
-        userLat!, userLng!,
-        best.lat ?? userLat!, best.lng ?? userLng!,
-      );
+      // Find the closest candidate that actually has real coordinates and
+      // is within maxNearbyKm — never fall back to userLat/userLng, since
+      // that silently produces a false "0km away".
+      PlaceModel? best;
+      double? bestDist;
+
+      for (final p in rawList) {
+        if (p.lat == null || p.lng == null) continue;
+        final d = LocationService.distanceKm(userLat!, userLng!, p.lat!, p.lng!);
+        if (d <= maxNearbyKm && (bestDist == null || d < bestDist)) {
+          best     = p;
+          bestDist = d;
+        }
+      }
+
+      if (best == null) {
+        // Nothing genuinely nearby — don't show the banner at all.
+        nearbyRestaurant = null;
+        notifyListeners();
+        return;
+      }
 
       nearbyRestaurant = {
         'name':        best.name,
@@ -243,14 +274,14 @@ class PlacesProvider extends ChangeNotifier {
         'price':       best.price,
         'rating':      best.rating,
         'score':       best.score,
-        'distance_km': dist,
+        'distance_km': bestDist,
         'place':       best,
       };
       notifyListeners();
 
       await _notificationService.showRestaurantNotification(
         restaurantName: best.name,
-        distanceKm:     dist,
+        distanceKm:     bestDist!,
         cuisine:        best.cuisine,
         restaurantId:   best.name,
       );
