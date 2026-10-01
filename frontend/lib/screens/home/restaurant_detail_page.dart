@@ -34,29 +34,35 @@ class RestaurantDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final scoreColor = AppTheme.scoreColor(place.score);
     final favProvider = context.watch<FavouritesProvider>();
     final isFav = favProvider.isFavourite(place.name);
     final placesProvider = context.read<PlacesProvider>();
 
+    // Header icon/text always sit on the gradient below, which is always
+    // dark regardless of theme — so header foreground stays white on purpose.
+    const headerFg = Colors.white;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1B2A),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
           // ── App bar ──────────────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 200,
             pinned: true,
-            backgroundColor: const Color(0xFF1A2E45),
+            backgroundColor: scheme.surface,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: const Icon(Icons.arrow_back, color: headerFg),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
               IconButton(
                 icon: Icon(
                   isFav ? Icons.favorite : Icons.favorite_border,
-                  color: isFav ? Colors.redAccent : Colors.white,
+                  color: isFav ? Colors.redAccent : headerFg,
                 ),
                 onPressed: () {
                   if (isFav) {
@@ -77,6 +83,8 @@ class RestaurantDetailPage extends StatelessWidget {
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
+                // Header banner keeps its own dark gradient in both themes —
+                // it's a branded hero section, not a plain surface.
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -113,7 +121,7 @@ class RestaurantDetailPage extends StatelessWidget {
                         child: Text(
                           place.name.toUpperCase(),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: headerFg,
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.5,
@@ -283,6 +291,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -296,7 +305,7 @@ class _StatCard extends StatelessWidget {
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 6),
             Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16)),
-            Text(label, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
+            Text(label, style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11)),
           ],
         ),
       ),
@@ -311,10 +320,11 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
+        Text(title, style: TextStyle(color: onSurface.withOpacity(0.45), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
         const SizedBox(height: 12),
         child,
       ],
@@ -330,15 +340,17 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final muted = onSurface.withOpacity(0.45);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white38, size: 18),
+          Icon(icon, color: muted, size: 18),
           const SizedBox(width: 10),
-          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+          Text(label, style: TextStyle(color: muted, fontSize: 13)),
           const Spacer(),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(color: onSurface, fontSize: 13, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -355,6 +367,7 @@ class _SignalBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final pct = (value * 100).toInt();
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -362,11 +375,11 @@ class _SignalBar extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 10),
-          SizedBox(width: 110, child: Text(label, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13))),
+          SizedBox(width: 110, child: Text(label, style: TextStyle(color: onSurface.withOpacity(0.75), fontSize: 13))),
           Expanded(
             child: Stack(
               children: [
-                Container(height: 8, decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(4))),
+                Container(height: 8, decoration: BoxDecoration(color: onSurface.withOpacity(0.1), borderRadius: BorderRadius.circular(4))),
                 FractionallySizedBox(
                   widthFactor: value.clamp(0.0, 1.0),
                   child: Container(height: 8, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4))),
@@ -376,7 +389,7 @@ class _SignalBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(width: 36, child: Text('$pct%', textAlign: TextAlign.right, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600))),
-          SizedBox(width: 32, child: Text(weight, textAlign: TextAlign.right, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10))),
+          SizedBox(width: 32, child: Text(weight, textAlign: TextAlign.right, style: TextStyle(color: onSurface.withOpacity(0.35), fontSize: 10))),
         ],
       ),
     );
