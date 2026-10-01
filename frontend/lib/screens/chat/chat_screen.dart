@@ -1,8 +1,20 @@
+// lib/screens/chat/chat_screen.dart
+//
+// FIX: _send() only handled click_recorded / click_unresolved / recommendations.
+// The backend's new `status: "smalltalk"` (hello / thanks / bye / help) fell
+// into the final else-branch, saw an empty recommendations list, and showed a
+// hardcoded "Couldn't find anything matching that" message. It now:
+//   1. handles status == 'smalltalk' and shows the backend's `message`
+//   2. for any other empty-results response, prefers the backend `message`
+//      over the hardcoded fallback text.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/places_provider.dart';
 import '../../services/api_client.dart';
 import '../../utils/app_theme.dart';
+import '../../models/place_model.dart';
+import '../home/restaurant_detail_page.dart';
 
 enum ChatSender { user, bot }
 
@@ -120,15 +132,19 @@ class _ChatScreenState extends State<ChatScreen> {
             "Couldn't match that to a restaurant from the last results — "
                 "could you name it directly?";
         setState(() => _messages.add(ChatMessage.botText(msg)));
+      } else if (status == 'smalltalk') {
+        // NEW: greeting / thanks / bye / help answered directly by the backend.
+        final msg = result['message'] as String? ??
+            "Hey! What are you craving today?";
+        setState(() => _messages.add(ChatMessage.botText(msg)));
       } else {
         final recsRaw = (result['recommendations'] as List?) ?? [];
         if (recsRaw.isEmpty) {
-          setState(() => _messages.add(
-                ChatMessage.botText(
-                  "Couldn't find anything matching that — try widening your "
-                  "budget or a different cuisine?",
-                ),
-              ));
+          // Prefer the backend's message if it sent one.
+          final msg = result['message'] as String? ??
+              "Couldn't find anything matching that — try widening your "
+                  "budget or a different cuisine?";
+          setState(() => _messages.add(ChatMessage.botText(msg)));
         } else {
           final recs = recsRaw
               .map((e) =>
@@ -212,6 +228,7 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.sender == ChatSender.user;
+    final scheme = Theme.of(context).colorScheme;
 
     if (message.recommendations != null) {
       return Align(
@@ -228,6 +245,11 @@ class _MessageBubble extends StatelessWidget {
       );
     }
 
+    // Bot bubble uses the theme's surface color (white card in light mode,
+    // dark card in dark mode). User bubble stays on brand primary either way.
+    final bubbleColor = isUser ? AppTheme.primary : scheme.surface;
+    final textColor = isUser ? Colors.white : scheme.onSurface;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -237,96 +259,123 @@ class _MessageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isUser ? AppTheme.primary : AppTheme.bgCard,
+          color: bubbleColor,
           borderRadius: BorderRadius.circular(16),
-          border: isUser ? null : Border.all(color: AppTheme.glassStroke),
+          border: isUser ? null : Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Text(
           message.text ?? '',
-          style: TextStyle(color: isUser ? Colors.white : AppTheme.textPrimary),
+          style: TextStyle(color: textColor),
         ),
       ),
     );
   }
 }
 
-// NOTE: this card's background (AppTheme.bgCard) is always dark, by design —
-// it does NOT follow the light/dark theme toggle. So every text style inside
-// it must use the fixed AppTheme text colors (textPrimary/textSecondary/textMuted),
-// never Theme.of(context), or it goes invisible when the app is in light mode.
+// Card follows the active theme and is wrapped in an InkWell so tapping it
+// opens RestaurantDetailPage. The "I like this" button keeps its own
+// onPressed, which works independently of the outer tap.
 class _RecommendationCard extends StatelessWidget {
   final ChatRecommendation rec;
   final VoidCallback onLike;
 
   const _RecommendationCard({required this.rec, required this.onLike});
 
+  void _openDetail(BuildContext context) {
+    final place = PlaceModel(
+      name: rec.name,
+      cuisine: rec.cuisine,
+      price: rec.price.toInt(),
+      rating: rec.rating,
+      score: 0.0,
+      whyRecommended: rec.explanation ?? '',
+      city: context.read<PlacesProvider>().currentCity,
+      lat: null,
+      lng: null,
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RestaurantDetailPage(place: place, rank: 1),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.glassStroke),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (rec.imageUrl != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                rec.imageUrl!,
-                height: 100,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.shrink(),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  rec.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: AppTheme.textPrimary,
-                  ),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final onSurface = scheme.onSurface;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _openDetail(context),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (rec.imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  rec.imageUrl!,
+                  height: 100,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
                 ),
               ),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    rec.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: onSurface,
+                    ),
+                  ),
+                ),
+                Text(
+                  '₹${rec.price.toStringAsFixed(0)}',
+                  style: TextStyle(color: onSurface),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${rec.cuisine} · ⭐ ${rec.rating.toStringAsFixed(1)}',
+              style: TextStyle(color: onSurface.withOpacity(0.7), fontSize: 11),
+            ),
+            if (rec.explanation != null && rec.explanation!.isNotEmpty) ...[
+              const SizedBox(height: 6),
               Text(
-                '₹${rec.price.toStringAsFixed(0)}',
-                style: const TextStyle(color: AppTheme.textPrimary),
+                rec.explanation!,
+                style: TextStyle(color: onSurface.withOpacity(0.55), fontSize: 11),
               ),
             ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '${rec.cuisine} · ⭐ ${rec.rating.toStringAsFixed(1)}',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-          ),
-          if (rec.explanation != null && rec.explanation!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              rec.explanation!,
-              style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onLike,
+                icon: const Icon(Icons.favorite_border, size: 16, color: AppTheme.primary),
+                label: const Text('I like this', style: TextStyle(color: AppTheme.primary)),
+              ),
             ),
           ],
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onLike,
-              icon: const Icon(Icons.favorite_border, size: 16, color: AppTheme.primary),
-              label: const Text('I like this', style: TextStyle(color: AppTheme.primary)),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -337,15 +386,16 @@ class _TypingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: AppTheme.bgCard,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.glassStroke),
+          border: Border.all(color: theme.dividerColor),
         ),
         child: const SizedBox(
           width: 20,
@@ -376,12 +426,15 @@ class _ChatInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: const BoxDecoration(
-          color: AppTheme.bgCard,
-          border: Border(top: BorderSide(color: AppTheme.glassStroke)),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border(top: BorderSide(color: theme.dividerColor)),
         ),
         child: Row(
           children: [
@@ -391,10 +444,10 @@ class _ChatInputBar extends StatelessWidget {
                 enabled: enabled,
                 textInputAction: TextInputAction.send,
                 onSubmitted: onSend,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: onSurface),
                 decoration: InputDecoration(
                   hintText: 'Ask for a recommendation…',
-                  hintStyle: TextStyle(color: AppTheme.textMuted),
+                  hintStyle: TextStyle(color: onSurface.withOpacity(0.4)),
                   border: InputBorder.none,
                 ),
               ),
