@@ -141,27 +141,63 @@ A LangGraph `StateGraph` (router → parse → retrieve → retry-if-empty → e
 
 ## Project structure
 
-```
+````
 geotaste-ai/
+├── README.md
+├── PHASE3_SUMMARY_AND_INTERVIEW_PREP.md   # design notes for the conversational agent
+│
 ├── backend/
 │   ├── main.py                   # FastAPI app, CORS, router registration
 │   ├── config.py                 # Pydantic settings from .env
 │   ├── database.py               # SQLAlchemy engine + session
-│   ├── model_artifacts/
+│   ├── requirements.txt
+│   │
+│   ├── model_artifacts/          # generated locally, not tracked in git
 │   │   ├── restaurants.parquet
 │   │   ├── tfidf_vectorizer.pkl
 │   │   └── popularity_scaler.pkl
-│   ├── models/                   # SQLAlchemy models (User, Place, UserClick, CachedResult)
-│   ├── routes/                   # recommender, converse, auth, places
+│   │
+│   ├── models/                   # SQLAlchemy models
+│   │   ├── user.py · place.py · user_click.py
+│   │   ├── cached_result.py      # L2 cache table
+│   │   ├── passport.py           # cuisine passport
+│   │   └── challenge.py          # weekly challenges
+│   │
+│   ├── routes/
+│   │   ├── recommender.py        # /recommend, /click, /not-hungry
+│   │   ├── converse.py           # /converse (LangGraph, multi-turn)
+│   │   ├── chat.py               # /chat, /explain (single-turn RAG/LLM)
+│   │   ├── auth.py               # register, login
+│   │   ├── places.py             # cities, city search
+│   │   └── social.py             # leaderboard, passport
+│   │
 │   ├── schemas/                  # Pydantic request/response schemas
-│   └── services/
-│       ├── recommender.py        # ML scoring engine
-│       ├── rag_engine.py         # ChromaDB hybrid retrieval
-│       ├── llm_engine.py         # query parsing, grounded explanations
-│       ├── chat_graph.py         # LangGraph StateGraph
-│       ├── session_store.py      # Redis-backed conversation history
-│       ├── image_service.py      # cuisine-level Unsplash image cache
-│       └── cache.py              # 3-layer cache orchestration
+│   │   ├── place.py · user.py · social.py
+│   │
+│   ├── services/
+│   │   ├── recommender.py        # ML scoring engine
+│   │   ├── scorer.py             # individual signal scoring functions
+│   │   ├── recommendation_service.py  # orchestrates scoring + cache
+│   │   ├── geo_service.py        # distance / city helpers
+│   │   ├── cache.py              # 3-layer cache orchestration
+│   │   ├── rag_engine.py         # ChromaDB hybrid retrieval
+│   │   ├── llm_engine.py         # query parsing, grounded explanations
+│   │   ├── chat_orchestrator.py  # single-turn chat pipeline
+│   │   ├── chat_graph.py         # LangGraph StateGraph (multi-turn agent)
+│   │   ├── session_store.py      # Redis-backed conversation history
+│   │   └── image_service.py      # cuisine-level Unsplash image cache
+│   │
+│   ├── rag/                      # RAG build scripts, evals, and flow tests
+│   │   ├── serialize.py          # structured rows -> text for embedding
+│   │   ├── embed_index.py        # build the ChromaDB index
+│   │   ├── fix_metadata_types.py
+│   │   ├── prefetch_cuisine_images.py   # one-time Unsplash -> Redis prefetch
+│   │   ├── eval_queries.py · eval_parse_accuracy.py     # 22-query eval harness
+│   │   └── test_*.py             # retrieval, llm_engine, hybrid_recommend,
+│   │                             # followup_flow, click_flow, retry_flow
+│   │
+│   └── (data prep, one-time)     # add_city_column.py, add_coordinates.py,
+│                                 # fix_failed_cities.py, check_data.py
 │
 └── frontend/ (lib/)
     ├── main.dart                 # MultiProvider + MaterialApp + MainShell
@@ -169,16 +205,22 @@ geotaste-ai/
     │                             # FavouritesProvider, ThemeProvider
     ├── models/                   # PlaceModel, BadgeDefinition
     ├── screens/
+    │   ├── splash_screen.dart
+    │   ├── onboarding/           # intro slides
+    │   ├── auth/
     │   ├── home/                 # discover feed, passport, challenges, leaderboard
     │   ├── chat/                 # Ask GeoTaste conversational UI
-    │   ├── gamification/         # progress/badges screen
-    │   └── ...                   # splash, onboarding, auth, explore, profile
+    │   ├── explore/
+    │   ├── favourites/
+    │   ├── progress/             # XP, level, badges
+    │   ├── taste_profile/
+    │   └── profile/
     ├── services/                 # ApiClient, LocationService, NotificationService,
     │                             # WeatherService
     ├── utils/
     │   └── app_theme.dart        # light + dark theme definitions ("Midnight Feast")
     └── widgets/                  # BadgeToast, StreakWidget, CityAutocomplete
-```
+````
 
 ---
 
@@ -208,6 +250,8 @@ uvicorn main:app --reload
 # API docs at http://localhost:8000/docs
 ```
 
+> `model_artifacts/` (dataset, TF-IDF vectorizer, scaler) and the ChromaDB index are generated locally and are not part of the repo. The RAG index is built with the scripts in `backend/rag/` (`serialize.py`, then `embed_index.py`).
+
 ### Frontend setup
 
 ```bash
@@ -221,7 +265,7 @@ flutter run -d chrome
 flutter run -d emulator
 ```
 
-> Full restart (not hot reload) is required after pulling changes that add new model fields (e.g. `lat`/`lng`, `imageUrl` on `PlaceModel`).
+> Full restart (not hot reload) is required after pulling changes that add new model fields (e.g. `lat`/`lng`, `imageUrl` on `PlaceModel`), or after theme-structure edits.
 
 ### Environment variables
 
@@ -237,6 +281,29 @@ REDIS_URL=redis://localhost:6379/0
 OPENWEATHER_API_KEY=your_key_here
 UNSPLASH_ACCESS_KEY=your_key_here
 GROQ_API_KEY=your_key_here
+```
+
+---
+
+## Testing and evaluation
+
+Flow tests and eval scripts live in `backend/rag/`. They need Redis running and a valid `GROQ_API_KEY`.
+
+```bash
+cd backend
+
+# conversational agent flow tests
+python rag/test_followup_flow.py     # follow-up modifiers are preserved across turns
+python rag/test_click_flow.py        # click intent -> record_click() with session-derived cuisine
+python rag/test_retry_flow.py        # over-constrained query -> relax and retry
+
+# retrieval / LLM layer
+python rag/test_retrieval.py
+python rag/test_llm_engine.py
+python rag/test_hybrid_recommend.py
+
+# evaluation (22-query set, ~94% avg field-level accuracy)
+python rag/eval_parse_accuracy.py
 ```
 
 ---
@@ -260,26 +327,3 @@ GROQ_API_KEY=your_key_here
 | `GET` | `/health` | Health check |
 
 ---
-
-## Project status
-
-- ✅ **Phase 1 — Core scoring engine**: 7-signal hybrid scorer, 3-layer cache, fuzzy city matching
-- ✅ **Phase 2 — RAG + LLM**: ChromaDB hybrid retrieval, grounded explanations, ~94% eval accuracy
-- ✅ **Phase 3 — Conversational agent**: LangGraph StateGraph, Redis session state, `/converse` endpoint, ChatScreen wired into the app
-- ✅ Light/dark theme toggle across all screens
-- 🔧 In progress: cuisine image pipeline verification (Redis cache population), final `add_coordinates.py` / `requirements.txt` diff review before push
-
-### Known fixed issues (recent)
-- Restaurant distance was always showing `0m` — backend wasn't including `lat`/`lng` in `/recommend` output; now included
-- Leaderboard "This Week" tab rendered empty for cities with fewer than 3 active users — podium/list logic now handles partial data
-- Chat recommendation cards and bot replies were unreadable in light mode — chat UI now uses fixed (always-dark) card colors independent of the app theme
-- City search field ignored `Enter` when multiple city matches existed — now falls back to exact match or accepts typed input
-- Cuisine filter chips included values (Momos, Chaat, Paneer) the backend didn't recognise, silently returning zero results — filter list now matches the backend's known cuisine set
-
----
-
-## Roadmap
-
-- Per-restaurant (not just per-cuisine) images
-- Full agentic tool-calling for the conversational agent (currently lightweight intent classification, by design, for latency)
-- Separate project: **ResearchCrew** — a CrewAI-based multi-agent research assistant (Planner/Search/Summarizer/Fact-Checker/Writer), Gemini + React/FastAPI, kept intentionally separate from GeoTaste's latency-conscious architecture
