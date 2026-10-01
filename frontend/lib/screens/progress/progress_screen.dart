@@ -5,6 +5,12 @@ import '../../providers/gamification_provider.dart';
 import '../../providers/places_provider.dart';
 import '../../models/badge_definitions.dart';
 
+// FIX: this screen was entirely hardcoded dark (Color(0xFF111318),
+// Colors.white/white54/white38, Color(0xFF1C2030)...) with no
+// Theme.of(context) usage at all, so it stayed dark even when the app
+// was switched to light theme. All colors below now come from the
+// active ColorScheme, matching passport_screen.dart / challenges_screen.dart
+// / leaderboard_screen.dart, which were already theme-aware.
 class ProgressScreen extends StatelessWidget {
   const ProgressScreen({super.key});
 
@@ -12,13 +18,17 @@ class ProgressScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final gami   = context.watch<GamificationProvider>();
     final places = context.watch<PlacesProvider>();
+    final cs     = Theme.of(context).colorScheme;
+    final bg     = Theme.of(context).scaffoldBackgroundColor;
+    const purple = Color(0xFF7F77DD); // brand accent, stays fixed in both themes
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111318),
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111318),
-        title: const Text('Progress',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        backgroundColor: bg,
+        elevation: 0,
+        title: Text('Progress',
+            style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -32,12 +42,12 @@ class ProgressScreen extends StatelessWidget {
                   children: [
                     Text('Level ${gami.level}',
                         style: const TextStyle(
-                            color: Color(0xFF7F77DD),
+                            color: purple,
                             fontSize: 22,
                             fontWeight: FontWeight.w800)),
                     Text('${gami.xp} XP',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 14)),
+                        style: TextStyle(
+                            color: cs.onSurface.withOpacity(0.54), fontSize: 14)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -45,14 +55,14 @@ class ProgressScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   child: LinearProgressIndicator(
                     value: gami.progress,
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation(Color(0xFF7F77DD)),
+                    backgroundColor: cs.onSurface.withOpacity(0.08),
+                    valueColor: const AlwaysStoppedAnimation(purple),
                     minHeight: 8,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text('${gami.nextLevelXp - gami.xp} XP to next level',
-                    style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    style: TextStyle(color: cs.onSurface.withOpacity(0.38), fontSize: 11)),
               ],
             ),
           ),
@@ -67,18 +77,18 @@ class ProgressScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 20),
 
-          const Text('Badges',
+          Text('Badges',
               style: TextStyle(
-                  color: Colors.white,
+                  color: cs.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           if (gami.unlockedBadges.isEmpty)
-            const Center(
+            Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text('No badges yet — keep exploring!',
-                    style: TextStyle(color: Colors.white38)),
+                    style: TextStyle(color: cs.onSurface.withOpacity(0.38))),
               ),
             )
           else
@@ -97,42 +107,48 @@ class _Card extends StatelessWidget {
   final Widget child;
   const _Card({required this.child});
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C2030),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.07)),
-        ),
-        child: child,
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+      ),
+      child: child,
+    );
+  }
 }
 
 class _StatTile extends StatelessWidget {
   final String emoji, value, label;
   const _StatTile(this.emoji, this.value, this.label);
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C2030),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.07)),
-        ),
-        child: Column(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: const TextStyle(
-                    color: Color(0xFF7F77DD),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800)),
-            Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 10)),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+      ),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  color: Color(0xFF7F77DD),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800)),
+          Text(label,
+              style: TextStyle(color: cs.onSurface.withOpacity(0.38), fontSize: 10)),
+        ],
+      ),
+    );
+  }
 }
 
 // FIX: typed as BadgeDefinition (not dynamic) so .title is known at compile time
@@ -141,25 +157,28 @@ class _BadgeTile extends StatelessWidget {
   final BadgeDefinition badge;
   const _BadgeTile(this.badge);
   @override
-  Widget build(BuildContext context) => Container(
-        width: 80,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C2030),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF7F77DD).withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Text(badge.emoji, style: const TextStyle(fontSize: 26)),
-            const SizedBox(height: 4),
-            Text(
-              badge.title, // ← FIX: was badge.name which doesn't exist
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white70, fontSize: 9),
-            ),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: 80,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF7F77DD).withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(badge.emoji, style: const TextStyle(fontSize: 26)),
+          const SizedBox(height: 4),
+          Text(
+            badge.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 9),
+          ),
+        ],
+      ),
+    );
+  }
 }
