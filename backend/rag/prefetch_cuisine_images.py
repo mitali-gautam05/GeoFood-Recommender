@@ -1,21 +1,24 @@
 """
-rag/prefetch_cuisine_images.py
+rag/prefetch_cuisine_images.py   (v2: photo POOLS instead of one photo per tag)
 
-One-time script: fetches one representative photo per canonical cuisine
-tag from Unsplash and stores the URL permanently in Redis. Run this once
-(and again only if you want to refresh the image set) -- recommend(),
-chat(), and converse() never call Unsplash themselves, they only read
-what this script writes.
+Fetches several representative photos per canonical cuisine tag from
+Unsplash and stores them in Redis as a JSON list under
+    <_IMAGE_KEY_PREFIX><tag>:list
+so that different restaurants of the same cuisine can show DIFFERENT photos
+(see services/image_variants.py, which picks one per restaurant by name hash).
 
-FIX: a few regional-Indian tags (e.g. "hyderabadi", "andhra") returned
-zero results for the plain "<tag> food" query -- Unsplash's tagged photo
-set for these specific regional terms is thin. fetch_image_for_tag() now
-tries a short list of query variants per tag before giving up, so a tag
-only ends up uncached if EVERY variant comes back empty.
+The old single-photo key (<_IMAGE_KEY_PREFIX><tag>) is left untouched, so
+get_cuisine_image_url() keeps working as a fallback.
+
+If a tag's plain "<tag> food" query returns too few photos, the extra query
+variants in QUERY_OVERRIDES are tried and their results merged, so thin
+regional tags (hyderabadi, andhra, ...) still end up with a usable pool.
 
 Run from backend/ as cwd:
-    python rag/prefetch_cuisine_images.py
+    python rag/prefetch_cuisine_images.py            # only tags with no pool yet
+    python rag/prefetch_cuisine_images.py --refresh  # rebuild every pool
 """
+import json
 import sys
 import time
 from pathlib import Path
@@ -27,11 +30,9 @@ from services.cache import get_redis
 from services.image_service import CANONICAL_CUISINE_TAGS, _IMAGE_KEY_PREFIX
 
 UNSPLASH_SEARCH_URL = "https://api.unsplash.com/search/photos"
+PER_PAGE = 10          # photos requested per query
+MIN_POOL = 8           # keep trying query variants until the pool has this many
 
-# Extra query variants for tags known to return thin/zero results on the
-# plain "<tag> food" search. Tried in order, first non-empty result wins.
-# The last variant in each list is deliberately broader (drops the exact
-# regional term) so it's very unlikely to also come back empty.
 QUERY_OVERRIDES: dict[str, list[str]] = {
     "hyderabadi": ["hyderabadi biryani", "hyderabadi cuisine", "indian biryani"],
     "andhra":     ["andhra cuisine", "andhra meals", "south indian food"],
@@ -39,41 +40,43 @@ QUERY_OVERRIDES: dict[str, list[str]] = {
 
 
 def _query_variants(tag: str) -> list[str]:
-    """Plain '<tag> food' first, then any tag-specific overrides."""
     return [f"{tag} food"] + QUERY_OVERRIDES.get(tag, [])
 
 
-def _search_once(query: str) -> str | None:
+def _search_many(query: str) -> list[str]:
     try:
         response = requests.get(
             UNSPLASH_SEARCH_URL,
-            params={"query": query, "per_page": 1, "orientation": "landscape"},
+            params={"query": query, "per_page": PER_PAGE, "orientation": "landscape"},
             headers={"Authorization": f"Client-ID {settings.UNSPLASH_ACCESS_KEY}"},
             timeout=10,
         )
         response.raise_for_status()
         results = response.json().get("results", [])
-        return results[0]["urls"]["regular"] if results else None
+        return [r["urls"]["regular"] for r in results]
     except Exception as e:
         print(f"    FAILED for query '{query}': {e}")
-        return None
+        return []
 
 
-def fetch_image_for_tag(tag: str) -> str | None:
+def fetch_pool_for_tag(tag: str) -> list[str]:
+    pool: list[str] = []
     variants = _query_variants(tag)
     for i, query in enumerate(variants):
-        url = _search_once(query)
-        if url:
-            if i > 0:
-                print(f"  (used fallback query '{query}')")
-            return url
-        print(f"  no results for '{query}'")
+        for url in _search_many(query):
+            if url not in pool:
+                pool.append(url)
+        if len(pool) >= MIN_POOL:
+            break
         if i < len(variants) - 1:
-            time.sleep(1.2)  # stay under Unsplash's demo rate limit between retries
-    return None
+            print(f"  pool has {len(pool)} for '{tag}', trying next query variant")
+            time.sleep(1.2)
+    return pool
 
 
 def main():
+    refresh = "--refresh" in sys.argv
+
     if not settings.UNSPLASH_ACCESS_KEY:
         print("UNSPLASH_ACCESS_KEY not set in .env -- aborting.")
         return
@@ -83,24 +86,30 @@ def main():
         print("Redis unavailable -- aborting (images must be cached to Redis).")
         return
 
-    print(f"Prefetching images for {len(CANONICAL_CUISINE_TAGS)} canonical cuisine tags...")
-    ok, skipped = 0, 0
+    print(f"Building photo pools for {len(CANONICAL_CUISINE_TAGS)} cuisine tags "
+          f"({'refreshing all' if refresh else 'new only'})...")
+    ok, skipped, failed = 0, 0, 0
     for tag in CANONICAL_CUISINE_TAGS:
-        key = _IMAGE_KEY_PREFIX + tag
-        if r.get(key):
-            print(f"[{tag}] already cached, skipping")
+        list_key = f"{_IMAGE_KEY_PREFIX}{tag}:list"
+        if not refresh and r.get(list_key):
+            print(f"[{tag}] pool already cached, skipping")
             skipped += 1
             continue
 
-        url = fetch_image_for_tag(tag)
-        if url:
-            r.set(key, url)  # no TTL -- permanent, refresh manually if ever needed
-            print(f"[{tag}] cached")
+        pool = fetch_pool_for_tag(tag)
+        if pool:
+            r.set(list_key, json.dumps(pool))   # no TTL -- permanent
+            # make sure the old single-photo key exists too (fallback path)
+            if not r.get(_IMAGE_KEY_PREFIX + tag):
+                r.set(_IMAGE_KEY_PREFIX + tag, pool[0])
+            print(f"[{tag}] cached {len(pool)} photos")
             ok += 1
-        time.sleep(1.2)  # stay comfortably under Unsplash's demo rate limit (50/hour)
+        else:
+            print(f"[{tag}] FAILED -- no photos found")
+            failed += 1
+        time.sleep(1.2)  # stay under Unsplash's demo rate limit (50/hour)
 
-    print(f"\nDone. {ok} newly cached, {skipped} already present, "
-          f"{len(CANONICAL_CUISINE_TAGS) - ok - skipped} failed.")
+    print(f"\nDone. {ok} pools built, {skipped} already present, {failed} failed.")
 
 
 if __name__ == "__main__":
