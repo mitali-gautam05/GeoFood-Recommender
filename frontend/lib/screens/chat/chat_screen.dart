@@ -15,6 +15,7 @@ import '../../services/api_client.dart';
 import '../../utils/app_theme.dart';
 import '../../models/place_model.dart';
 import '../home/restaurant_detail_page.dart';
+import '../../widgets/restaurant_card.dart';
 
 enum ChatSender { user, bot }
 
@@ -25,6 +26,10 @@ class ChatRecommendation {
   final double price;
   final String? explanation;
   final String? imageUrl;
+  // Full backend JSON for this restaurant (score, sim_score, rating_score,
+  // budget_score, ...). Kept so tapping a card can build a complete
+  // PlaceModel with real scores instead of zeros.
+  final Map<String, dynamic> raw;
 
   ChatRecommendation({
     required this.name,
@@ -33,6 +38,7 @@ class ChatRecommendation {
     required this.price,
     this.explanation,
     this.imageUrl,
+    this.raw = const {},
   });
 
   factory ChatRecommendation.fromJson(Map<String, dynamic> j) {
@@ -44,6 +50,7 @@ class ChatRecommendation {
       explanation:
           (j['llm_explanation'] as String?) ?? (j['why_recommended'] as String?),
       imageUrl: j['image_url'] as String?,
+      raw: Map<String, dynamic>.from(j),
     );
   }
 }
@@ -231,17 +238,9 @@ class _MessageBubble extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     if (message.recommendations != null) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: message.recommendations!
-              .map((rec) => _RecommendationCard(
-                    rec: rec,
-                    onLike: () => onLike(rec),
-                  ))
-              .toList(),
-        ),
+      return _RecommendationGrid(
+        recs: message.recommendations!,
+        onLike: onLike,
       );
     }
 
@@ -272,27 +271,38 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-// Card follows the active theme and is wrapped in an InkWell so tapping it
-// opens RestaurantDetailPage. The "I like this" button keeps its own
-// onPressed, which works independently of the outer tap.
-class _RecommendationCard extends StatelessWidget {
-  final ChatRecommendation rec;
-  final VoidCallback onLike;
+// Responsive "boxes" layout (Swiggy style): 1 column on narrow screens,
+// 2 on medium, 3 on wide. Uses Wrap + fixed card width (instead of GridView)
+// so each card can size itself to its text and never overflows.
+class _RecommendationGrid extends StatelessWidget {
+  final List<ChatRecommendation> recs;
+  final void Function(ChatRecommendation) onLike;
 
-  const _RecommendationCard({required this.rec, required this.onLike});
+  const _RecommendationGrid({required this.recs, required this.onLike});
 
-  void _openDetail(BuildContext context) {
-    final place = PlaceModel(
-      name: rec.name,
-      cuisine: rec.cuisine,
-      price: rec.price.toInt(),
-      rating: rec.rating,
-      score: 0.0,
-      whyRecommended: rec.explanation ?? '',
-      city: context.read<PlacesProvider>().currentCity,
-      lat: null,
-      lng: null,
-    );
+  void _openDetail(BuildContext context, ChatRecommendation rec) {
+    final city = context.read<PlacesProvider>().currentCity;
+    PlaceModel place;
+    try {
+      // Same parser the Discover list and Favourites use, so score and the
+      // score breakdown (sim/rating/budget/...) come through properly.
+      final json = Map<String, dynamic>.from(rec.raw);
+      json.putIfAbsent('city', () => city);
+      place = PlaceModel.fromJson(json);
+    } catch (_) {
+      // Fallback: still carry the real overall score if present.
+      place = PlaceModel(
+        name: rec.name,
+        cuisine: rec.cuisine,
+        price: rec.price.toInt(),
+        rating: rec.rating,
+        score: (rec.raw['score'] as num?)?.toDouble() ?? 0.0,
+        whyRecommended: rec.explanation ?? '',
+        city: city,
+        lat: null,
+        lng: null,
+      );
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -303,80 +313,37 @@ class _RecommendationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final onSurface = scheme.onSurface;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final available = constraints.maxWidth;
+        final cols = available >= 900 ? 3 : (available >= 460 ? 2 : 1);
+        final cardWidth = (available - spacing * (cols - 1)) / cols;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => _openDetail(context),
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: theme.dividerColor),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (rec.imageUrl != null) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  rec.imageUrl!,
-                  height: 100,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const SizedBox.shrink(),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    rec.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: onSurface,
-                    ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final rec in recs)
+                SizedBox(
+                  width: cardWidth,
+                  child: RestaurantBoxCard(
+                    name: rec.name,
+                    cuisine: rec.cuisine,
+                    rating: rec.rating,
+                    price: rec.price,
+                    imageUrl: rec.imageUrl,
+                    note: rec.explanation,
+                    onTap: () => _openDetail(context, rec),
+                    onLike: () => onLike(rec),
                   ),
                 ),
-                Text(
-                  '₹${rec.price.toStringAsFixed(0)}',
-                  style: TextStyle(color: onSurface),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${rec.cuisine} · ⭐ ${rec.rating.toStringAsFixed(1)}',
-              style: TextStyle(color: onSurface.withOpacity(0.7), fontSize: 11),
-            ),
-            if (rec.explanation != null && rec.explanation!.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                rec.explanation!,
-                style: TextStyle(color: onSurface.withOpacity(0.55), fontSize: 11),
-              ),
             ],
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onLike,
-                icon: const Icon(Icons.favorite_border, size: 16, color: AppTheme.primary),
-                label: const Text('I like this', style: TextStyle(color: AppTheme.primary)),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
