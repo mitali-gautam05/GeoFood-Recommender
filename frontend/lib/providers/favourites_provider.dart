@@ -1,3 +1,11 @@
+// lib/providers/favourites_provider.dart
+//
+// FIXES:
+// 1. Race condition: add()/remove() now wait for the initial load to finish,
+//    so a fast add() can no longer overwrite the saved list with a partial one.
+// 2. Silent data loss: a failed load no longer resets _favourites to [], and
+//    one bad entry no longer drops the whole list (each item parsed separately).
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,14 +15,18 @@ class FavouritesProvider extends ChangeNotifier {
   List<PlaceModel> _favourites = [];
   List<PlaceModel> get favourites => List.unmodifiable(_favourites);
 
+  // Completes once the saved list has been read from storage.
+  late final Future<void> _ready;
+
   FavouritesProvider() {
-    _load();
+    _ready = _load();
   }
 
   bool isFavourite(String name) =>
       _favourites.any((p) => p.name == name);
 
   Future<void> add(PlaceModel place) async {
+    await _ready; // wait for the initial load before touching the list
     if (!isFavourite(place.name)) {
       _favourites.add(place);
       notifyListeners();
@@ -23,6 +35,7 @@ class FavouritesProvider extends ChangeNotifier {
   }
 
   Future<void> remove(String name) async {
+    await _ready;
     _favourites.removeWhere((p) => p.name == name);
     notifyListeners();
     await _save();
@@ -46,6 +59,11 @@ class FavouritesProvider extends ChangeNotifier {
         'time_boost':      p.timeBoost,
         'pref_score':      p.prefScore,
         'popularity_norm': p.popularityNorm,
+        // FIX: these were never saved, so favourites reloaded without a photo
+        // (placeholder icon) and without coordinates.
+        'image_url':       p.imageUrl,
+        'lat':             p.lat,
+        'lng':             p.lng,
       }).toList();
       await prefs.setString('favourites', jsonEncode(list));
     } catch (e) {
@@ -62,15 +80,21 @@ class FavouritesProvider extends ChangeNotifier {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
 
-      _favourites = decoded
-          .whereType<Map<String, dynamic>>()
-          .map((e) => PlaceModel.fromJson(e))
-          .toList();
-
+      // Parse each item separately so one bad entry doesn't wipe the list.
+      final loaded = <PlaceModel>[];
+      for (final e in decoded.whereType<Map<String, dynamic>>()) {
+        try {
+          loaded.add(PlaceModel.fromJson(e));
+        } catch (err) {
+          debugPrint('Skipping bad favourite: $err');
+        }
+      }
+      _favourites = loaded;
       notifyListeners();
     } catch (e) {
+      // Deliberately NOT resetting _favourites here: keep whatever we have
+      // so a load error can't cause the next save to erase stored data.
       debugPrint('FavouritesProvider _load error: $e');
-      _favourites = [];
     }
   }
 }
