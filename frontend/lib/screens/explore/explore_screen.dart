@@ -9,6 +9,9 @@ import '../home/challenges_screen.dart';
 import '../home/leaderboard_screen.dart';
 import '../home/mood_screen.dart';
 
+// THEME FIX: this screen used hardcoded dark colors (0xFF0D1117 bg,
+// Colors.white text, fixed dark gradients). Now everything neutral comes
+// from the active ColorScheme; only brand accents stay fixed.
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
 
@@ -16,8 +19,10 @@ class ExploreScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<PlacesProvider>();
     final gami     = context.watch<GamificationProvider>();
-    // FIX: userName lives in PlacesProvider — was previously undefined 'name'
-    final name     = provider.userName.isNotEmpty
+    final cs       = Theme.of(context).colorScheme;
+    final bg       = Theme.of(context).scaffoldBackgroundColor;
+
+    final name = provider.userName.isNotEmpty
         ? provider.userName.split(' ').first
         : 'Explorer';
 
@@ -25,7 +30,7 @@ class ExploreScreen extends StatelessWidget {
     const totalCuisines = 22;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: bg,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -38,8 +43,8 @@ class ExploreScreen extends StatelessWidget {
                   children: [
                     Text(
                       'Hey $name 👋',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: cs.onSurface,
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                       ),
@@ -48,7 +53,7 @@ class ExploreScreen extends StatelessWidget {
                     Text(
                       'What do you want to explore today?',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
+                        color: cs.onSurface.withOpacity(0.55),
                         fontSize: 14,
                       ),
                     ),
@@ -57,7 +62,6 @@ class ExploreScreen extends StatelessWidget {
               ),
             ),
 
-            // pass provider (PlacesProvider) so streak reads correctly
             SliverToBoxAdapter(
               child: _XpStrip(gami: gami, places: provider),
             ),
@@ -70,7 +74,6 @@ class ExploreScreen extends StatelessWidget {
                     emoji:         '🛂',
                     title:         'Food Passport',
                     subtitle:      '$unlockedCount of $totalCuisines cuisines unlocked',
-                    gradient:      const [Color(0xFF1A1F2E), Color(0xFF252B3B)],
                     accent:        const Color(0xFFFF6B35),
                     progress:      unlockedCount / totalCuisines,
                     progressLabel: '${(unlockedCount / totalCuisines * 100).round()}% complete',
@@ -84,7 +87,6 @@ class ExploreScreen extends StatelessWidget {
                     emoji:    '🏆',
                     title:    'Weekly Challenges',
                     subtitle: 'Complete missions to earn bonus XP',
-                    gradient: const [Color(0xFF1A1500), Color(0xFF252000)],
                     accent:   const Color(0xFFF39C12),
                     onTap: () => Navigator.push(
                       context,
@@ -96,7 +98,6 @@ class ExploreScreen extends StatelessWidget {
                     emoji:    '📊',
                     title:    'City Leaderboard',
                     subtitle: 'Top food explorers in ${provider.currentCity}',
-                    gradient: const [Color(0xFF0A001A), Color(0xFF15002A)],
                     accent:   const Color(0xFF9C27B0),
                     onTap: () => Navigator.push(
                       context,
@@ -114,9 +115,9 @@ class ExploreScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Pick a mood',
+                    Text('Pick a mood',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: cs.onSurface,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -165,33 +166,30 @@ class _XpStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161B27),
+        color: cs.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: cs.onSurface.withOpacity(0.08)),
       ),
       child: Row(
         children: [
-          // FIX: totalXp → xp  (GamificationProvider exposes `xp`, not `totalXp`)
-          _strip('⚡', '${gami.xp}',                  'Total XP',   const Color(0xFFFF6B35)),
-          _div(),
-          // FIX: gami.streak → places.streak (streak lives in PlacesProvider)
-          _strip('🔥', '${places.streak}',            'Day Streak', const Color(0xFFF39C12)),
-          _div(),
-          // FIX: gami.badges → gami.unlockedBadges  (correct getter name)
-          _strip('🏅', '${gami.unlockedBadges.length}', 'Badges',   const Color(0xFF9C27B0)),
-          _div(),
-          // gami.level is correctly defined in GamificationProvider
-          _strip('📈', 'Lv ${gami.level}',            'Level',      const Color(0xFF2ECC71)),
+          _strip(cs, '⚡', '${gami.xp}',                    'Total XP',   const Color(0xFFFF6B35)),
+          _div(cs),
+          _strip(cs, '🔥', '${places.streak}',              'Day Streak', const Color(0xFFF39C12)),
+          _div(cs),
+          _strip(cs, '🏅', '${gami.unlockedBadges.length}', 'Badges',     const Color(0xFF9C27B0)),
+          _div(cs),
+          _strip(cs, '📈', 'Lv ${gami.level}',              'Level',      const Color(0xFF2ECC71)),
         ],
       ),
     );
   }
 
-  Widget _strip(String emoji, String val, String label, Color color) =>
+  Widget _strip(ColorScheme cs, String emoji, String val, String label, Color color) =>
     Expanded(
       child: Column(
         children: [
@@ -200,16 +198,16 @@ class _XpStrip extends StatelessWidget {
           Text(val, style: TextStyle(
             color: color, fontSize: 14, fontWeight: FontWeight.w800,
           )),
-          Text(label, style: const TextStyle(
-            color: Colors.white30, fontSize: 9,
+          Text(label, style: TextStyle(
+            color: cs.onSurface.withOpacity(0.45), fontSize: 9,
           )),
         ],
       ),
     );
 
-  Widget _div() => Container(
+  Widget _div(ColorScheme cs) => Container(
     width: 1, height: 36,
-    color: Colors.white.withOpacity(0.07),
+    color: cs.onSurface.withOpacity(0.08),
   );
 }
 
@@ -218,7 +216,6 @@ class _BigCard extends StatelessWidget {
   final String       emoji;
   final String       title;
   final String       subtitle;
-  final List<Color>  gradient;
   final Color        accent;
   final double?      progress;
   final String?      progressLabel;
@@ -228,7 +225,6 @@ class _BigCard extends StatelessWidget {
     required this.emoji,
     required this.title,
     required this.subtitle,
-    required this.gradient,
     required this.accent,
     required this.onTap,
     this.progress,
@@ -237,25 +233,31 @@ class _BigCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Theme-aware gradient: accent tint laid over the current surface color.
+    // Dark mode -> dark tinted card, light mode -> soft pastel card.
+    final c1 = Color.alphaBlend(accent.withOpacity(0.12), cs.surface);
+    final c2 = Color.alphaBlend(accent.withOpacity(0.04), cs.surface);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: gradient,
+            colors: [c1, c2],
             begin: Alignment.topLeft,
             end:   Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withOpacity(0.25)),
+          border: Border.all(color: accent.withOpacity(0.28)),
         ),
         child: Row(
           children: [
             Container(
               width: 56, height: 56,
               decoration: BoxDecoration(
-                color:  accent.withOpacity(0.15),
+                color: accent.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -267,22 +269,22 @@ class _BigCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,
+                  Text(title, style: TextStyle(
+                    color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700,
                   )),
                   const SizedBox(height: 3),
                   Text(subtitle, style: TextStyle(
-                    color: Colors.white.withOpacity(0.45), fontSize: 12,
+                    color: cs.onSurface.withOpacity(0.55), fontSize: 12,
                   )),
                   if (progress != null) ...[
                     const SizedBox(height: 10),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value:            progress,
-                        backgroundColor:  Colors.white.withOpacity(0.07),
-                        valueColor:       AlwaysStoppedAnimation(accent),
-                        minHeight:        4,
+                        value:           progress,
+                        backgroundColor: cs.onSurface.withOpacity(0.08),
+                        valueColor:      AlwaysStoppedAnimation(accent),
+                        minHeight:       4,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -294,7 +296,7 @@ class _BigCard extends StatelessWidget {
               ),
             ),
             Icon(Icons.arrow_forward_ios_rounded,
-                color: accent.withOpacity(0.6), size: 14),
+                color: accent.withOpacity(0.7), size: 14),
           ],
         ),
       ),
