@@ -1,9 +1,18 @@
+// lib/screens/favourites/favourites_screen.dart
+//
+// CHANGES:
+//   - Saved restaurants are shown in the same responsive BOX grid as the
+//     dashboard (1 to 4 columns depending on width).
+//   - Each box has a "Remove" button instead of Interested / Not for me /
+//     Not hungry (which made no sense on an already-saved restaurant), and
+//     no #rank badge.
+//   - Tap on a box opens RestaurantDetailPage (handled inside PlaceCard).
+//   - Removing shows a snackbar with UNDO.
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/favourites_provider.dart';
-import '../../providers/places_provider.dart';
 import '../home/widgets/place_card.dart';
-import '../home/restaurant_detail_page.dart';
 
 class FavouritesScreen extends StatelessWidget {
   const FavouritesScreen({super.key});
@@ -11,7 +20,6 @@ class FavouritesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final favProvider = context.watch<FavouritesProvider>();
-    final placesProvider = context.read<PlacesProvider>();
     final favs = favProvider.favourites;
 
     return Scaffold(
@@ -40,41 +48,58 @@ class FavouritesScreen extends StatelessWidget {
                 ],
               ),
             )
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: favs.length,
-              itemBuilder: (_, i) {
-                final place = favs[i];
-                return Dismissible(
-                  key: Key(place.name),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    color: Colors.redAccent,
-                    child: const Icon(Icons.delete_outline,
-                        color: Colors.white, size: 28),
-                  ),
-                  onDismissed: (_) => favProvider.remove(place.name),
-                  child: GestureDetector(
-                    onTap: () =>
-                        RestaurantDetailPage.show(context, place, i + 1),
-                    child: PlaceCard(
-                      place:    place,
-                      rank:     i + 1,
-                      username: placesProvider.userName,
-                      onFeedback: (action) {
-                        if (action == 'interested') {
-                          placesProvider.recordClick(
-                              placesProvider.userName, place.cuisine);
-                        } else if (action == 'not_hungry') {
-                          placesProvider.setNotHungry();
-                        }
-                      },
-                    ),
-                  ),
-                );
-              },
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const spacing = 14.0;
+                  final available = constraints.maxWidth;
+                  final cols = (available / 340).floor().clamp(1, 4);
+                  final cardWidth = (available - spacing * (cols - 1)) / cols;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: List.generate(favs.length, (i) {
+                      final place = favs[i];
+                      return SizedBox(
+                        width: cardWidth,
+                        child: PlaceCard(
+                          // key by name so a removed card doesn't hand its
+                          // state to the next one
+                          key: ValueKey(place.name),
+                          place: place,
+                          rank: i + 1,
+                          showRank: false,
+                          username: '',
+                          onRemove: () {
+                            favProvider.remove(place.name);
+                            final messenger = ScaffoldMessenger.of(context);
+                            messenger.hideCurrentSnackBar();
+                            // Newer Flutter keeps a SnackBar that has an action
+                            // on screen until dismissed, ignoring `duration`.
+                            // So we close it ourselves after 3 seconds.
+                            final controller = messenger.showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Removed ${place.name} from favourites'),
+                                duration: const Duration(seconds: 3),
+                                action: SnackBarAction(
+                                  label: 'UNDO',
+                                  onPressed: () => favProvider.add(place),
+                                ),
+                              ),
+                            );
+                            Future.delayed(const Duration(seconds: 3), () {
+                              controller.close();
+                            });
+                          },
+                        ),
+                      );
+                    }),
+                  );
+                },
+              ),
             ),
     );
   }
