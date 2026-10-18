@@ -64,10 +64,12 @@ class _FilterSheetState extends State<FilterSheet> {
   late double _minRating;
   String? _cuisine;
 
-  static const _cuisines = [
+ static const _cuisines = [
     'North Indian', 'South Indian', 'Chinese', 'Biryani',
-    'Pizza', 'Burger', 'Momos', 'Chaat', 'Rolls',
-    'Mughlai', 'Kebab', 'Paneer', 'Fast Food', 'Desserts',
+    'Pizza', 'Burgers', 'Rolls', 'Mughlai', 'Kebabs',
+    'Fast Food', 'Street Food', 'Desserts', 'Continental',
+    'Italian', 'Seafood', 'Punjabi', 'Gujarati', 'Rajasthani',
+    'Hyderabadi', 'Kerala',
   ];
 
   @override
