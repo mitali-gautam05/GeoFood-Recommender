@@ -1,16 +1,14 @@
 // lib/screens/home/mood_screen.dart
-// FIXES:
-//   Line 145: PlacesProvider isn't a type
-//   Reason: import was written as:
-//     import package:frontend/lib/providers/places_provider.dart;
-//   That is INVALID Dart syntax — missing quotes around the path.
-//   Also the path itself was wrong (lib/ is not included in package imports).
-//   Fix: replaced with correct relative import.
-//   Also removed: import 'dart:math' — was imported but never used.
+// THEME FIX:
+//   Previously this screen used hardcoded colors (Color(0xFF0D1117),
+//   Colors.white/white54/white38/white30/white70) — so it ALWAYS rendered
+//   dark regardless of the app's light/dark theme toggle.
+//   Fix: replaced every hardcoded color with Theme.of(context).colorScheme
+//   values, so this screen now follows ThemeProvider like the rest of the app.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../providers/places_provider.dart'; // ← FIXED (was broken syntax)
+import '../../../providers/places_provider.dart';
 
 // ── Mood data ─────────────────────────────────────────────────
 const List<Map<String, dynamic>> kMoods = [
@@ -21,7 +19,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Biryani • Kebab • Fine Dining',
     'gradient': [Color(0xFFFF6B35), Color(0xFFFF8E53)],
     'emoji':    '🎉',
-    'bg':       Color(0xFF1A0F00),
   },
   {
     'id':       'comfort',
@@ -30,7 +27,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Dal Rice • Khichdi • Soup',
     'gradient': [Color(0xFF4CAF50), Color(0xFF81C784)],
     'emoji':    '🤗',
-    'bg':       Color(0xFF001A00),
   },
   {
     'id':       'adventurous',
@@ -39,7 +35,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Thai • Korean • Ethiopian',
     'gradient': [Color(0xFF9C27B0), Color(0xFFCE93D8)],
     'emoji':    '🌍',
-    'bg':       Color(0xFF0F001A),
   },
   {
     'id':       'date',
@@ -48,7 +43,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Italian • Continental • Rooftop',
     'gradient': [Color(0xFFE91E63), Color(0xFFF48FB1)],
     'emoji':    '💕',
-    'bg':       Color(0xFF1A0010),
   },
   {
     'id':       'tired',
@@ -57,7 +51,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Street Food • Fast Food • Thali',
     'gradient': [Color(0xFF607D8B), Color(0xFF90A4AE)],
     'emoji':    '😴',
-    'bg':       Color(0xFF0A0E12),
   },
   {
     'id':       'spicy',
@@ -66,7 +59,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Chettinad • Andhra • Schezwan',
     'gradient': [Color(0xFFE74C3C), Color(0xFFFF7043)],
     'emoji':    '🌶️',
-    'bg':       Color(0xFF1A0000),
   },
   {
     'id':       'healthy',
@@ -75,7 +67,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Salad • Smoothies • Grain bowls',
     'gradient': [Color(0xFF8BC34A), Color(0xFFAED581)],
     'emoji':    '🥗',
-    'bg':       Color(0xFF0A1500),
   },
   {
     'id':       'sweet',
@@ -84,7 +75,6 @@ const List<Map<String, dynamic>> kMoods = [
     'cuisines': 'Mithai • Cake • Ice Cream',
     'gradient': [Color(0xFFFF69B4), Color(0xFFFFB3D9)],
     'emoji':    '🍮',
-    'bg':       Color(0xFF1A0015),
   },
 ];
 
@@ -137,7 +127,6 @@ class _MoodScreenState extends State<MoodScreen>
     await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
 
-    // FIX line 145: PlacesProvider now found via correct import above
     final provider = context.read<PlacesProvider>();
     await provider.fetchRecommendationsWithMood(
       username: provider.userName,
@@ -149,8 +138,11 @@ class _MoodScreenState extends State<MoodScreen>
 
   @override
   Widget build(BuildContext context) {
+    // ── Pull colors from the active theme instead of hardcoding them ──
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,17 +153,19 @@ class _MoodScreenState extends State<MoodScreen>
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.close_rounded,
-                        color: Colors.white54),
+                    icon: Icon(Icons.close_rounded,
+                        color: scheme.onSurface.withOpacity(0.54)),
                     onPressed: () => Navigator.pop(context),
                     padding:     EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
                   const Spacer(),
-                  const Text('MOOD SELECTOR',
+                  Text('MOOD SELECTOR',
                     style: TextStyle(
-                      color: Colors.white30, fontSize: 11,
-                      letterSpacing: 3, fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withOpacity(0.3),
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -179,21 +173,26 @@ class _MoodScreenState extends State<MoodScreen>
             ),
 
             // Heading
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 24, 20, 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 6),
               child: Text(
                 'How are you\nfeeling right now?',
                 style: TextStyle(
-                  color: Colors.white, fontSize: 28,
-                  fontWeight: FontWeight.w800, height: 1.2,
+                  color: scheme.onSurface,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Text(
                 "We'll find food that matches your vibe",
-                style: TextStyle(color: Colors.white38, fontSize: 14),
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.38),
+                  fontSize: 14,
+                ),
               ),
             ),
 
@@ -204,7 +203,10 @@ class _MoodScreenState extends State<MoodScreen>
                 gridDelegate:
                     const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount:   2,
-                  childAspectRatio: 7,
+                  // was 7 — too flat for 2 lines of text + emoji, caused
+                  // a few px of bottom overflow once the real (Nunito)
+                  // font metrics applied. 5.4 gives enough breathing room.
+                  childAspectRatio: 5.4,
                   crossAxisSpacing: 12,
                   mainAxisSpacing:  12,
                 ),
@@ -235,13 +237,14 @@ class _MoodScreenState extends State<MoodScreen>
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: const Center(
+                child: Center(
                   child: Text(
                     'Skip — just show me restaurants',
                     style: TextStyle(
-                      color: Colors.white30, fontSize: 13,
+                      color: scheme.onSurface.withOpacity(0.3),
+                      fontSize: 13,
                       decoration:      TextDecoration.underline,
-                      decorationColor: Colors.white30,
+                      decorationColor: scheme.onSurface.withOpacity(0.3),
                     ),
                   ),
                 ),
@@ -292,8 +295,18 @@ class _MoodCardState extends State<_MoodCard>
 
   @override
   Widget build(BuildContext context) {
+    final scheme   = Theme.of(context).colorScheme;
     final colors   = widget.mood['gradient'] as List<Color>;
     final isActive = widget.isActive;
+
+    // Text/label colors now derive from the theme instead of a fixed
+    // white/white70 — so they stay readable in BOTH light and dark mode.
+    final labelColor = isActive
+        ? Colors.white // active card always has a saturated gradient bg
+        : scheme.onSurface.withOpacity(0.85);
+    final subLabelColor = isActive
+        ? Colors.white70
+        : scheme.onSurface.withOpacity(0.5);
 
     return GestureDetector(
       onTapDown:   (_) => _pressCtrl.forward(),
@@ -306,6 +319,9 @@ class _MoodCardState extends State<_MoodCard>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
+              // Inactive card: theme surface tinted with the mood's accent
+              // color, instead of always compositing over a black page.
+              color: isActive ? null : scheme.surfaceContainerHighest.withOpacity(0.4),
               gradient: isActive
                   ? LinearGradient(
                       begin: Alignment.topLeft,
@@ -314,8 +330,8 @@ class _MoodCardState extends State<_MoodCard>
                     )
                   : LinearGradient(
                       colors: [
-                        colors[0].withOpacity(0.12),
-                        colors[1].withOpacity(0.06),
+                        colors[0].withOpacity(0.14),
+                        colors[1].withOpacity(0.07),
                       ],
                       begin: Alignment.topLeft,
                       end:   Alignment.bottomRight,
@@ -346,20 +362,28 @@ class _MoodCardState extends State<_MoodCard>
                     children: [
                       Text(
                         widget.mood['label'] as String,
+                        // explicit `height` pins the line-height so it
+                        // doesn't shift a few px once Nunito (vs the
+                        // fallback font) actually loads and applies.
                         style: TextStyle(
-                          color: isActive ? Colors.white : Colors.white70,
-                          fontSize: 13, fontWeight: FontWeight.w700,
+                          color: labelColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          height: 1.15,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         widget.mood['cuisines'] as String,
                         style: TextStyle(
-                          color: isActive
-                              ? Colors.white70
-                              : Colors.white.withOpacity(0.3),
+                          color: subLabelColor,
                           fontSize: 10,
+                          height: 1.15,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
