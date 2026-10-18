@@ -171,11 +171,28 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField> {
         focusNode: _focus,
         onChanged: _onChanged,
         onSubmitted: (v) {
+          final typed = v.trim();
+          if (typed.isEmpty) return;
+
           if (_suggestions.length == 1) {
             _select(_suggestions.first);
           } else if (_suggestions.isEmpty) {
-            // Accept whatever was typed
-            widget.onCitySelected(v.trim());
+            widget.onCitySelected(typed);
+            _removeOverlay();
+            _focus.unfocus();
+          } else {
+            // Multiple suggestions: try exact match first, else accept typed text
+            final exactMatch = _suggestions.firstWhere(
+              (c) => c.toLowerCase() == typed.toLowerCase(),
+              orElse: () => '',
+            );
+            if (exactMatch.isNotEmpty) {
+              _select(exactMatch);
+            } else {
+              widget.onCitySelected(typed);
+              _removeOverlay();
+              _focus.unfocus();
+            }
           }
         },
         decoration: (widget.decoration ??
