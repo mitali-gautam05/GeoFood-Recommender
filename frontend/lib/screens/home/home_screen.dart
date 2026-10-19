@@ -1,12 +1,19 @@
 // ============================================================
 // screens/home/home_screen.dart
-// Phase 1 fixes applied:
-//   1. Leaderboard IconButton added to AppBar actions
-//   2. Import comments corrected — MoodChipRow comes from streak_widget.dart
-//      NOT from weather_recommendation_service.dart
-//   3. WeatherRecommendationBanner now uses weatherContext from
-//      PlacesProvider (no more per-rebuild API calls)
-//   4. All imports verified against provider getters
+//
+// CHANGES in this version:
+//   1. Restaurant list is now a responsive grid of BOX cards
+//      (1 column on phones, up to 4 on wide screens) instead of a
+//      single full-width list.
+//   2. PlaceCard now handles its own tap (opens RestaurantDetailPage), so the
+//      outer GestureDetector was removed (it never fired anyway: the inner
+//      one won the tap), and the unused restaurant_detail_page import dropped.
+//   3. After `await provider.recordClick(...)` there is now a mounted check
+//      before touching context.
+//   4. Cleaned up duplicated comments in the AppBar actions.
+// Earlier fixes kept: Leaderboard shortcut, MoodChipRow from
+// streak_widget.dart, WeatherRecommendationBanner reads weatherContext from
+// PlacesProvider (no per-rebuild API calls).
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -17,7 +24,6 @@ import '../../../providers/favourites_provider.dart';
 import '../../../providers/gamification_provider.dart';
 import '../../../widgets/badge_toast.dart';
 import '../../../widgets/city_autocomplete_field.dart';
-import 'restaurant_detail_page.dart';
 import 'widgets/place_card.dart';
 import 'widgets/hunger_dialog.dart';
 import 'widgets/nearby_banner.dart';
@@ -31,7 +37,7 @@ import 'leaderboard_screen.dart';
 import '../../../widgets/streak_widget.dart';
 import '../../../services/weather_recommendation_service.dart';
 import '../chat/chat_screen.dart';
-import '../../../providers/theme_provider.dart'; 
+import '../../../providers/theme_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -168,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (_) => const ChallengesScreen()),
               ),
             ),
-            // Leaderboard shortcut (was imported but missing from AppBar — fixed)
+            // Leaderboard shortcut
             IconButton(
               icon: const Icon(Icons.leaderboard_outlined),
               tooltip: 'Leaderboard',
@@ -177,8 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
               ),
             ),
-            // Filter icon
-                        // Leaderboard shortcut (was imported but missing from AppBar — fixed)
             // Chat shortcut — Phase 3 conversational search
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline),
@@ -215,12 +219,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
               ],
             ),
-            // Refresh icon
+            // Theme toggle
             IconButton(
-                  icon: Icon(themeProvider.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-                  tooltip: themeProvider.isDark ? 'Switch to light' : 'Switch to dark',
-                  onPressed: () => themeProvider.toggle(),
-  ),
+              icon: Icon(themeProvider.isDark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined),
+              tooltip:
+                  themeProvider.isDark ? 'Switch to light' : 'Switch to dark',
+              onPressed: () => themeProvider.toggle(),
+            ),
+            // Refresh icon
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh',
@@ -245,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         body: Column(
           children: [
-            // Streak banner — reads PlacesProvider.streak (correct per Critical Rule #4)
+            // Streak banner — reads PlacesProvider.streak
             const StreakBanner(),
 
             // Nearby restaurant GPS banner
@@ -353,8 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Text('🍃', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
-            Text('No restaurants found',
-                style: theme.textTheme.titleMedium),
+            Text('No restaurants found', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             TextButton(
               onPressed: _showChangeCitySheet,
@@ -365,15 +372,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Main restaurant list
+    // Main restaurant grid
     return RefreshIndicator(
       onRefresh: () =>
           provider.fetchRecommendations(username: provider.userName),
       child: CustomScrollView(
         slivers: [
           // WeatherRecommendationBanner — reads weatherContext FROM PlacesProvider
-          // so it does NOT fire its own API call on every rebuild.
-          // PlacesProvider already fetches weather inside fetchRecommendations().
           SliverToBoxAdapter(
             child: WeatherRecommendationBanner(
               weatherContext: provider.weatherContext,
@@ -395,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // MoodChipRow — from streak_widget.dart (NOT weather service)
+          // MoodChipRow — from streak_widget.dart
           SliverToBoxAdapter(
             child: MoodChipRow(
               currentMood: provider.currentMood,
@@ -418,13 +423,12 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Container(
                 margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.amber.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: Colors.amber.withOpacity(0.4)),
+                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
                 ),
                 child: Row(
                   children: [
@@ -437,8 +441,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         'showing nearest city: '
                         '${provider.matchedCity.toUpperCase()} '
                         '(${provider.fallbackDistance?.toStringAsFixed(0)} km away)',
-                        style: const TextStyle(
-                            color: Colors.amber, fontSize: 12),
+                        style:
+                            const TextStyle(color: Colors.amber, fontSize: 12),
                       ),
                     ),
                   ],
@@ -451,65 +455,75 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: Text(
                 '${provider.places.length} restaurants found',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.grey),
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
               ),
             ),
           ),
 
-          // Restaurant list
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (_, i) {
-                final place = provider.places[i];
-                return GestureDetector(
-                  onTap: () =>
-                      RestaurantDetailPage.show(context, place, i + 1),
-                  child: PlaceCard(
-                    place: place,
-                    rank: i + 1,
-                    username: provider.userName,
-                    onFeedback: (String action) async {
-                      if (action == 'interested') {
-                        await provider.recordClick(
-                          provider.userName,
-                          place.cuisine,
-                        );
-                        context
-                            .read<FavouritesProvider>()
-                            .add(place);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Noted! More like ${place.name} 😋'),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      } else if (action == 'declined') {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content:
-                                  Text('Got it, skipping this one 👎'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      } else if (action == 'not_hungry') {
-                        provider.setNotHungry();
-                      }
-                    },
-                  ),
-                );
-              },
-              childCount: provider.places.length,
+          // ── Restaurant BOX grid ─────────────────────────────────────
+          // Wrap + fixed card width (instead of GridView/SliverGrid) so every
+          // card sizes itself to its own text and can never overflow.
+          // Columns: ~1 per 340px of width, between 1 and 4.
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const spacing = 14.0;
+                  final available = constraints.maxWidth;
+                  final cols = (available / 340).floor().clamp(1, 4);
+                  final cardWidth =
+                      (available - spacing * (cols - 1)) / cols;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: List.generate(provider.places.length, (i) {
+                      final place = provider.places[i];
+                      return SizedBox(
+                        width: cardWidth,
+                        child: PlaceCard(
+                          place: place,
+                          rank: i + 1,
+                          username: provider.userName,
+                          onFeedback: (String action) async {
+                            if (action == 'interested') {
+                              await provider.recordClick(
+                                provider.userName,
+                                place.cuisine,
+                              );
+                              if (!mounted) return;
+                              context.read<FavouritesProvider>().add(place);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('Noted! More like ${place.name} 😋'),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            } else if (action == 'declined') {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Got it, skipping this one 👎'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            } else if (action == 'not_hungry') {
+                              provider.setNotHungry();
+                            }
+                          },
+                        ),
+                      );
+                    }),
+                  );
+                },
+              ),
             ),
           ),
 
           // Extra space for FAB
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          const SliverToBoxAdapter(child: SizedBox(height: 90)),
         ],
       ),
     );
