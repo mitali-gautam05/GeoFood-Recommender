@@ -7,6 +7,7 @@ class PlaceModel {
   final String whyRecommended;
   final String city;
   final String matchedCity;
+  final String diet;           
 
   // Score breakdown signals
   final double simScore;
@@ -42,6 +43,7 @@ class PlaceModel {
     this.lat,   // NEW — optional, defaults to null
     this.lng,   // NEW — optional, defaults to null
     this.imageUrl,
+    this.diet = 'mixed', 
 
   });
 
@@ -66,6 +68,9 @@ class PlaceModel {
       lat:            (json['lat'] as num?)?.toDouble(),
       lng:            (json['lng'] as num?)?.toDouble(),
       imageUrl: json['image_url'] as String?,
+      diet: (json['diet'] as String?) ?? 'mixed',
+      
+
     );
   }
 
