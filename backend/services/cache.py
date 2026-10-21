@@ -1,4 +1,9 @@
 # backend/services/cache.py
+#
+# DIET CHANGE: make_cache_key() now takes an optional `diet` ('veg' | 'nonveg').
+# The diet is appended to the hashed string ONLY when it is set, so:
+#   - "Any" (diet=None) produces exactly the same keys as before (no cache wipe)
+#   - a Pure Veg user can never be served a cached non-veg result (different key)
 
 import json
 import hashlib
@@ -47,10 +52,13 @@ def make_cache_key(
     mood:         Optional[str]  = None,
     time_slot:    Optional[str]  = None,
     weather_tags: Optional[list] = None,
+    diet:         Optional[str]  = None,   # DIET: 'veg' | 'nonveg' | None (= Any)
 ) -> str:
     budget_bucket = round(budget / 50) * 50
     weather_str   = ",".join(sorted(weather_tags or []))
     raw           = f"{city.lower()}:{query.lower()}:{budget_bucket}:{mood or ''}:{time_slot or ''}:{weather_str}"
+    if diet in ("veg", "nonveg"):
+        raw += f":diet={diet}"             # only changes the key when a diet is chosen
     short_hash    = hashlib.md5(raw.encode()).hexdigest()[:8]
     return f"recommend:{city.lower()}:{short_hash}"
 
