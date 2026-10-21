@@ -4,6 +4,8 @@
 #   2. All endpoints now receive a DB session via Depends(get_db)
 #   3. /click persists to PostgreSQL (not just RAM)
 #   4. recommend() call passes db session for cache + click history
+#   5. DIET: optional `diet` ('veg' | 'nonveg'); anything else means "Any".
+#      Input is trimmed + lower-cased, so "Veg" / " NONVEG " still work.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -24,6 +26,14 @@ from services.recommender import (
 router = APIRouter()
 
 
+def normalise_diet(value: Optional[str]) -> Optional[str]:
+    """'veg' / 'nonveg' (any case, any surrounding spaces) -> as is. Else None (= Any)."""
+    if not value:
+        return None
+    value = value.strip().lower()
+    return value if value in ("veg", "nonveg") else None
+
+
 class RecommendRequest(BaseModel):
     username:    str
     query:       str
@@ -39,6 +49,8 @@ class RecommendRequest(BaseModel):
     time_slot:       Optional[str]       = None
     weather_tags:    Optional[List[str]] = None
     avoid_cuisines:  Optional[List[str]] = None
+    # DIET — optional user setting. None / "any" / anything else = no filtering.
+    diet:            Optional[str]       = None
 
 
 class ClickRequest(BaseModel):
@@ -53,6 +65,8 @@ def get_recommendations(
     db:  Session = Depends(get_db),   # ← DB session injected
 ):
     try:
+        diet = normalise_diet(req.diet)
+
         result = recommend(
             username       = req.username,
             query          = req.query,
@@ -68,6 +82,7 @@ def get_recommendations(
             time_slot      = req.time_slot,
             weather_tags   = req.weather_tags,
             avoid_cuisines = req.avoid_cuisines,
+            diet           = diet,    # ← DIET
             db             = db,      # ← enables cache + PostgreSQL click history
         )
         return {
@@ -78,6 +93,7 @@ def get_recommendations(
             "fallback_from":     result.get("fallback_from"),
             "fallback_distance": result.get("fallback_distance"),
             "paused":            is_paused(req.username),
+            "diet":              result.get("diet"),
             "recommendations":   result.get("recommendations", []),
         }
     except Exception as e:
