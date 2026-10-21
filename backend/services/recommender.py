@@ -6,6 +6,10 @@
 #   3. build_user_vector() now loads click history from PostgreSQL on startup
 #   4. 3-layer cache wired in via services/cache.py
 #   5. Mood boost (+25%), weather boost (+10%), avoid-cuisine penalty (-30%)
+#   6. DIET: optional `diet` filter ('veg' | 'nonveg'). None = Any = no change
+#      in behaviour. See the "DIET" comments below.
+#   7. FIX: fallback recursion (city not found -> nearest city) now also passes
+#      budget_max and cuisine, so the retry behaves like the original call.
 
 import joblib
 import pandas as pd
@@ -34,6 +38,18 @@ df     = pd.read_parquet(BASE / "restaurants.parquet")
 df["food_type"]  = df["food_type"].fillna("").astype(str)
 df["name"]       = df["name"].fillna("unknown").astype(str)
 df["tfidf_text"] = (df["food_type"] + " " + df["name"].str.lower()).fillna("")
+
+# DIET: 'veg' / 'nonveg' / 'mixed' column comes from add_diet_flag.py.
+# If the parquet has not been swapped yet, every row is treated as 'mixed':
+#   - Pure Veg then returns NOTHING (safe: a veg user is never shown non-veg)
+#   - Non-veg / Any behave normally
+if "diet" not in df.columns:
+    logger.warning(
+        "restaurants.parquet has no 'diet' column - Pure Veg filter will return "
+        "no results. Run add_diet_flag.py and swap in restaurants_diet.parquet."
+    )
+    df["diet"] = "mixed"
+df["diet"] = df["diet"].fillna("mixed").astype(str)
 
 KNOWN_CITIES = df["city"].unique().tolist()
 
@@ -291,8 +307,11 @@ def recommend(
     time_slot:          Optional[str]  = None,   # overrides server-side hour detection
     weather_tags:       Optional[list] = None,
     avoid_cuisines:     Optional[list] = None,
-    budget_max: Optional[float] = None,      # NEW
-    cuisine: Optional[str] = None,
+    budget_max:         Optional[float] = None,
+    cuisine:            Optional[str]   = None,
+    # DIET: 'veg' = Pure Veg only, 'nonveg' = everything except pure-veg places,
+    # None (or anything else) = Any. Never a default filter.
+    diet:               Optional[str]  = None,
     # Internal recursion args
     _fallback_city:     str            = None,
     _fallback_distance: float          = None,
@@ -302,6 +321,9 @@ def recommend(
 
     if hunger_mode == "later":
         set_not_hungry(username)
+
+    diet = diet.strip().lower() if isinstance(diet, str) else None
+    diet = diet if diet in ("veg", "nonveg") else None
 
     # ── 3-layer cache check ───────────────────────────────────────────────────
     if db is not None:
@@ -313,6 +335,7 @@ def recommend(
             mood         = mood,
             time_slot    = time_slot,
             weather_tags = weather_tags,
+            diet         = diet,          # DIET: separate cache entries per diet
         )
         cached = cache_get(cache_key, db)
         if cached is not None:
@@ -332,6 +355,8 @@ def recommend(
                 user_lat=user_lat, user_lng=user_lng,
                 mood=mood, time_slot=time_slot,
                 weather_tags=weather_tags, avoid_cuisines=avoid_cuisines,
+                budget_max=budget_max, cuisine=cuisine,   # FIX: were dropped before
+                diet=diet,                # DIET: keep the choice on fallback
                 _fallback_city=city, _fallback_distance=distance_km,
                 db=db,
             )
@@ -343,6 +368,31 @@ def recommend(
         }
 
     city_df = df[df["city"] == city_matched].copy()
+
+    # ── DIET filter ───────────────────────────────────────────────────────────
+    # Applied BEFORE rag_id is assigned, so rag_id (= original df index) stays
+    # valid for the semantic-score lookup below.
+    #   veg    -> only places confidently labelled pure-veg
+    #   nonveg -> everything except pure-veg ('nonveg' + 'mixed')
+    if diet == "veg":
+        city_df = city_df[city_df["diet"] == "veg"]
+    elif diet == "nonveg":
+        city_df = city_df[city_df["diet"].isin(["nonveg", "mixed"])]
+
+    if city_df.empty:
+        # e.g. a small city with no pure-veg place. Return an honest empty
+        # result instead of crashing on empty frames further down.
+        return {
+            "status":            "ok",
+            "searched_city":     city,
+            "matched_city":      city_matched,
+            "fallback_from":     _fallback_city,
+            "fallback_distance": _fallback_distance,
+            "relaxed_notes":     [],
+            "diet":              diet,
+            "recommendations":   [],
+        }
+
     city_df["rag_id"] = city_df.index.astype(str)
     city_df = city_df.reset_index(drop=True)
 
@@ -355,7 +405,8 @@ def recommend(
     query_vec            = tfidf.transform([query.lower()])
     city_df["sim_score"] = cosine_similarity(query_vec, city_tfidf).flatten()
     semantic_scores, relaxed_notes = get_semantic_scores(
-    query, city_matched, budget_max=budget_max, cuisine=cuisine, top_k=200)
+        query, city_matched, budget_max=budget_max, cuisine=cuisine, top_k=200
+    )
     city_df["semantic_score"] = city_df["rag_id"].map(semantic_scores).fillna(0.0)
     city_df["sim_score"] = 0.5 * city_df["sim_score"] + 0.5 * city_df["semantic_score"]
 
@@ -474,10 +525,10 @@ def recommend(
             "popularity_norm":  round(float(row["popularity_norm"]), 3),
             "mood_boost":       round(float(row["mood_boost"]),      3),
             "weather_boost":    round(float(row["weather_boost"]),   3),
-            "image_url": get_restaurant_image_url(row["food_type"], row["name"]),
+            "image_url":        get_restaurant_image_url(row["food_type"], row["name"]),
             "lat":              float(row["lat"]) if pd.notna(row["lat"]) else None,
-             "lng":              float(row["lng"]) if pd.notna(row["lng"]) else None,
-
+            "lng":              float(row["lng"]) if pd.notna(row["lng"]) else None,
+            "diet":             str(row["diet"]),   # DIET: veg / nonveg / mixed
         })
 
     result = {
@@ -486,7 +537,8 @@ def recommend(
         "matched_city":      city_matched,
         "fallback_from":     _fallback_city,
         "fallback_distance": _fallback_distance,
-        "relaxed_notes":      relaxed_notes, 
+        "relaxed_notes":     relaxed_notes,
+        "diet":              diet,
         "recommendations":   output,
     }
 
