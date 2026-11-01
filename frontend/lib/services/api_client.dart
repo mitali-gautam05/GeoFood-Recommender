@@ -1,6 +1,8 @@
 // lib/services/api_client.dart
 // Phase 4 update: register() now accepts optional city parameter
 // and sends it in the JSON body so the backend stores it in User.city.
+// DIET update: getRecommendations() now sends optional `diet`
+// ('veg' | 'nonveg') in the body. null = Any (key not sent at all).
 // All other methods IDENTICAL to Phase 2 version.
 
 import 'dart:convert';
@@ -250,6 +252,7 @@ class ApiClient {
     String?       timeSlot,
     List<String>? weatherTags,
     List<String>? avoidCuisines,
+    String?       diet,   // DIET: 'veg' | 'nonveg' | null (= Any)
   }) async {
     try {
       final body = <String, dynamic>{
@@ -270,6 +273,7 @@ class ApiClient {
         body['weather_tags']   = weatherTags;
       if (avoidCuisines != null && avoidCuisines.isNotEmpty)
         body['avoid_cuisines'] = avoidCuisines;
+      if (diet          != null) body['diet']           = diet;   // DIET
 
       final response = await http.post(
         Uri.parse('$_baseUrl/recommend'),
@@ -298,7 +302,8 @@ class ApiClient {
     }
   }
 
-    // ── Conversational endpoint ──────────────────────────────────────
+  // ── Conversational endpoint ────────────────────────────────────────────────
+  // NOTE: no diet param yet — chat (/converse) diet support is the last step.
 
   static Future<Map<String, dynamic>> converse({
     required String username,

@@ -13,11 +13,17 @@
 // card's own GestureDetector (score sheet) swallowed the tap, so the detail
 // page opened by home_screen's outer GestureDetector never fired.
 //
+// DIET: a small veg / non-veg DietDot sits before the cuisine text. It is
+// hidden for 'mixed' (unknown) places, with no leftover gap.
+// FIX: rating badge showed "★ ★ 4.2" because formattedRating already
+// includes the star. It now shows place.formattedRating as is.
+//
 // Theme-aware: surface / onSurface / dividerColor come from the ColorScheme.
 
 import 'package:flutter/material.dart';
 import '../../../models/place_model.dart';
 import '../../../utils/app_theme.dart';
+import '../../../widgets/diet_selector.dart';   // DIET (DietDot)
 import '../restaurant_detail_page.dart';
 import 'score_breakdown_sheet.dart';
 
@@ -60,6 +66,7 @@ class PlaceCard extends StatelessWidget {
     final onSurface = cs.onSurface;
     final scoreColor = AppTheme.scoreColor(place.score);
     final hasImage = place.imageUrl != null && place.imageUrl!.isNotEmpty;
+    final showDiet = place.diet == 'veg' || place.diet == 'nonveg';
 
     return Material(
       color: cs.surface,
@@ -192,7 +199,7 @@ class PlaceCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '★ ${place.formattedRating}',
+                              place.formattedRating,   // already includes ★
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 11,
@@ -213,12 +220,24 @@ class PlaceCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      place.cuisine,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: onSurface.withOpacity(0.65), fontSize: 13),
+                    // DIET: veg / non-veg dot before the cuisine text
+                    Row(
+                      children: [
+                        if (showDiet) ...[
+                          DietDot(diet: place.diet),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            place.cuisine,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: onSurface.withOpacity(0.65),
+                                fontSize: 13),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     Wrap(

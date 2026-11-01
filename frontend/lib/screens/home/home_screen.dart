@@ -2,6 +2,9 @@
 // screens/home/home_screen.dart
 //
 // CHANGES in this version:
+//   0. NEW: compact DietSelector bar sits in build() above the body, so it
+//      stays visible in loading / empty / error states. Empty state is now
+//      diet-aware with a "Show all places" button.
 //   1. Restaurant list is now a responsive grid of BOX cards
 //      (1 column on phones, up to 4 on wide screens) instead of a
 //      single full-width list.
@@ -24,6 +27,7 @@ import '../../../providers/favourites_provider.dart';
 import '../../../providers/gamification_provider.dart';
 import '../../../widgets/badge_toast.dart';
 import '../../../widgets/city_autocomplete_field.dart';
+import '../../../widgets/diet_selector.dart';
 import 'widgets/place_card.dart';
 import 'widgets/hunger_dialog.dart';
 import 'widgets/nearby_banner.dart';
@@ -259,6 +263,14 @@ class _HomeScreenState extends State<HomeScreen> {
             // Nearby restaurant GPS banner
             const NearbyRestaurantBanner(),
 
+            // Diet preference bar — lives OUTSIDE _buildBody on purpose, so it
+            // stays visible during loading / empty / error states and the user
+            // can always switch back to "Any".
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: DietSelector(compact: true),
+            ),
+
             Expanded(child: _buildBody(provider)),
           ],
         ),
@@ -353,21 +365,41 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Empty
+    // Empty (diet-aware)
     if (provider.places.isEmpty) {
+      final String? dietLabel = provider.diet == 'veg'
+          ? 'pure-veg'
+          : provider.diet == 'nonveg'
+              ? 'non-veg'
+              : null;
+
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🍃', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text('No restaurants found', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: _showChangeCitySheet,
-              child: const Text('Try a different city'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🍃', style: TextStyle(fontSize: 48)),
+              const SizedBox(height: 12),
+              Text(
+                dietLabel != null
+                    ? 'No $dietLabel places found here'
+                    : 'No restaurants found',
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              if (dietLabel != null)
+                FilledButton(
+                  onPressed: () => provider.setDiet(null),
+                  child: const Text('Show all places'),
+                ),
+              TextButton(
+                onPressed: _showChangeCitySheet,
+                child: const Text('Try a different city'),
+              ),
+            ],
+          ),
         ),
       );
     }

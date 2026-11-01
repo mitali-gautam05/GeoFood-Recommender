@@ -35,6 +35,9 @@ class PlacesProvider extends ChangeNotifier {
   String           currentCity     = 'delhi';
   String           currentQuery    = 'biryani';
   double           budget          = 300;
+  String? _diet;
+  String? get diet => _diet;
+  bool _dietLoaded = false;
 
   double? userLat;
   double? userLng;
@@ -92,6 +95,7 @@ class PlacesProvider extends ChangeNotifier {
     _loadSeenCuisines();
     _loadStreak();
     _loadRecentClicks();
+    _loadDiet();
   }
 
   // ── SETTERS ───────────────────────────────────────────────────────────────
@@ -238,6 +242,7 @@ class PlacesProvider extends ChangeNotifier {
         budget:   budget,
         userLat:  userLat,
         userLng:  userLng,
+        diet: _diet,
         topN:     5, // check a few candidates, not just the single best match
       );
 
@@ -327,6 +332,31 @@ class PlacesProvider extends ChangeNotifier {
     _currentMood = null;
     notifyListeners();
   }
+  
+    Future<void> _loadDiet() async {
+    if (_dietLoaded) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('diet_pref');
+    _diet = (raw == 'veg' || raw == 'nonveg') ? raw : null;
+    _dietLoaded = true;
+    notifyListeners();
+  }
+
+  Future<void> setDiet(String? value) async {
+    final v = (value == 'veg' || value == 'nonveg') ? value : null;
+    if (v == _diet) return;
+    _diet = v;
+    _dietLoaded = true;
+    nearbyRestaurant = null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (v == null) {
+      await prefs.remove('diet_pref');
+    } else {
+      await prefs.setString('diet_pref', v);
+    }
+    if (_userName.isNotEmpty) await fetchRecommendations(username: _userName);
+  }
 
   // ── FETCH RECOMMENDATIONS ─────────────────────────────────────────────────
 
@@ -348,7 +378,7 @@ class PlacesProvider extends ChangeNotifier {
     if (query          != null) currentQuery = query;
     if (budgetOverride != null) budget       = budgetOverride;
     if (mood           != null) _currentMood = mood;
-
+    if (!_dietLoaded) await _loadDiet();
     if (!locationFetched) await fetchUserLocation();
 
     if (userLat != null && userLng != null) {
@@ -375,6 +405,7 @@ class PlacesProvider extends ChangeNotifier {
         timeSlot:      timeSlot,
         weatherTags:   weatherTags,
         avoidCuisines: avoidCuisines,
+        diet: _diet,
       );
 
       if (result['status'] == 'city_not_found') {

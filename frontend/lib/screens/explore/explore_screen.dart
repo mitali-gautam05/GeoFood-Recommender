@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/places_provider.dart';
 import '../../providers/gamification_provider.dart';
+import '../../widgets/diet_selector.dart';   // DIET
 import '../home/passport_screen.dart';
 import '../home/challenges_screen.dart';
 import '../home/leaderboard_screen.dart';
@@ -65,6 +66,9 @@ class ExploreScreen extends StatelessWidget {
             SliverToBoxAdapter(
               child: _XpStrip(gami: gami, places: provider),
             ),
+
+            // DIET: Any / Pure Veg / Non-veg setting (default Any)
+            const SliverToBoxAdapter(child: DietSelector()),
 
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
