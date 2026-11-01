@@ -12,11 +12,22 @@ scikit-learn
 scipy
 fuzzywuzzy
 python-Levenshtein
-redis          # ← NEW: 3-layer cache Layer 1
+redis          # 3-layer cache, layer 1
 pyarrow        # for reading .parquet model artifacts
 
-# New dependencies for GeoTaste RAG/LLM layer
+# Auth (routes/auth.py): JWT + pbkdf2_sha256 password hashing + OAuth2 login form
+python-jose[cryptography]
+passlib
+python-multipart
 
+# HTTP clients (services/geo_service.py, rag/prefetch_cuisine_images.py)
+httpx
+requests
+
+# Dataset preparation (add_coordinates.py, fix_failed_cities.py)
+geopy
+
+# GeoTaste RAG/LLM layer
 fastembed>=0.3.0
 chromadb>=0.5.0
 tqdm>=4.66.0
