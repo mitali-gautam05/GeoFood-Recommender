@@ -1,12 +1,19 @@
 // lib/screens/chat/chat_screen.dart
 //
-// FIX: _send() only handled click_recorded / click_unresolved / recommendations.
-// The backend's new `status: "smalltalk"` (hello / thanks / bye / help) fell
-// into the final else-branch, saw an empty recommendations list, and showed a
-// hardcoded "Couldn't find anything matching that" message. It now:
-//   1. handles status == 'smalltalk' and shows the backend's `message`
-//   2. for any other empty-results response, prefers the backend `message`
-//      over the hardcoded fallback text.
+// FIX (history lost on back): the messages list used to live inside
+// _ChatScreenState, so leaving the screen disposed it and re-opening started
+// a fresh chat with only the greeting. History now lives in ChatHistoryStore,
+// an app-wide singleton (ChangeNotifier) that outlives the screen:
+//   - re-opening the screen shows the earlier conversation
+//   - a reply that arrives after you left the screen is still saved
+//   - the "sending" flag is shared too, so the typing bubble is correct
+//   - "New chat" button (app bar) clears it
+// It is in-memory only: a full app restart still starts a fresh chat.
+// Call ChatHistoryStore.instance.clear() on logout so the next user doesn't
+// see the previous user's chat.
+//
+// Earlier fix kept: status == 'smalltalk' shows the backend `message`, and any
+// empty-results response prefers the backend `message` over hardcoded text.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -73,6 +80,49 @@ class ChatMessage {
         text = null;
 }
 
+/// App-wide chat history. Lives outside the screen so it survives the screen
+/// being closed and re-opened.
+class ChatHistoryStore extends ChangeNotifier {
+  ChatHistoryStore._();
+  static final ChatHistoryStore instance = ChatHistoryStore._();
+
+  static const String greeting =
+      "Hey! Tell me what you're craving and I'll find something for you. "
+      "Try a follow-up too — 'cheaper option?' or 'the first one, I loved it!' "
+      "after I show results.";
+
+  final List<ChatMessage> _messages = [];
+  bool _isSending = false;
+
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  bool get isSending => _isSending;
+
+  /// Seeds the greeting only when there is no history yet. Does not notify
+  /// (it is called from initState).
+  void ensureGreeting() {
+    if (_messages.isEmpty) _messages.add(ChatMessage.botText(greeting));
+  }
+
+  void add(ChatMessage m) {
+    _messages.add(m);
+    notifyListeners();
+  }
+
+  void setSending(bool v) {
+    _isSending = v;
+    notifyListeners();
+  }
+
+  /// "New chat" button and logout.
+  void clear() {
+    _messages
+      ..clear()
+      ..add(ChatMessage.botText(greeting));
+    _isSending = false;
+    notifyListeners();
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -81,69 +131,71 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final List<ChatMessage> _messages = [];
+  final ChatHistoryStore _store = ChatHistoryStore.instance;
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    _messages.add(
-      ChatMessage.botText(
-        "Hey! Tell me what you're craving and I'll find something for you. "
-        "Try a follow-up too — 'cheaper option?' or 'the first one, I loved it!' "
-        "after I show results.",
-      ),
-    );
+    _store.ensureGreeting();
+    _store.addListener(_scrollToBottom);
+    // Re-opening the screen: jump to the latest message.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController
+            .jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   Future<void> _send(String rawText) async {
     final text = rawText.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty || _store.isSending) return;
 
+    // Read everything needed from context BEFORE any await. After this point
+    // the store is global, so no mounted checks are needed: a reply that lands
+    // after the screen was closed is still saved to history.
     final places = context.read<PlacesProvider>();
+    final city = places.currentCity;
+    final budget = places.budget;
+    final userLat = places.userLat;
+    final userLng = places.userLng;
+    final knownName = places.userName;
 
-    setState(() {
-      _messages.add(ChatMessage.user(text));
-      _isSending = true;
-    });
+    _store.add(ChatMessage.user(text));
+    _store.setSending(true);
     _controller.clear();
-    _scrollToBottom();
 
     try {
-      final username = places.userName.isNotEmpty
-          ? places.userName
-          : await ApiClient.getUsername();
+      final username =
+          knownName.isNotEmpty ? knownName : await ApiClient.getUsername();
 
       final result = await ApiClient.converse(
         username: username,
         query: text,
-        city: places.currentCity,
-        budget: places.budget,
-        userLat: places.userLat,
-        userLng: places.userLng,
+        city: city,
+        budget: budget,
+        userLat: userLat,
+        userLng: userLng,
       );
-
-      if (!mounted) return;
 
       final status = result['status'] as String?;
 
       if (status == 'click_recorded') {
         final name = result['clicked_name'] as String? ?? 'that one';
-        setState(() => _messages.add(
-              ChatMessage.botText("Nice pick — saved your interest in $name!"),
-            ));
+        _store.add(
+            ChatMessage.botText("Nice pick — saved your interest in $name!"));
       } else if (status == 'click_unresolved') {
         final msg = result['message'] as String? ??
             "Couldn't match that to a restaurant from the last results — "
                 "could you name it directly?";
-        setState(() => _messages.add(ChatMessage.botText(msg)));
+        _store.add(ChatMessage.botText(msg));
       } else if (status == 'smalltalk') {
-        // NEW: greeting / thanks / bye / help answered directly by the backend.
+        // greeting / thanks / bye / help answered directly by the backend.
         final msg = result['message'] as String? ??
             "Hey! What are you craving today?";
-        setState(() => _messages.add(ChatMessage.botText(msg)));
+        _store.add(ChatMessage.botText(msg));
       } else {
         final recsRaw = (result['recommendations'] as List?) ?? [];
         if (recsRaw.isEmpty) {
@@ -151,25 +203,19 @@ class _ChatScreenState extends State<ChatScreen> {
           final msg = result['message'] as String? ??
               "Couldn't find anything matching that — try widening your "
                   "budget or a different cuisine?";
-          setState(() => _messages.add(ChatMessage.botText(msg)));
+          _store.add(ChatMessage.botText(msg));
         } else {
           final recs = recsRaw
               .map((e) =>
                   ChatRecommendation.fromJson(e as Map<String, dynamic>))
               .toList();
-          setState(() => _messages.add(ChatMessage.botRecommendations(recs)));
+          _store.add(ChatMessage.botRecommendations(recs));
         }
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _messages.add(
-            ChatMessage.botText("Something went wrong — ${e.toString()}"),
-          ));
+      _store.add(ChatMessage.botText("Something went wrong — ${e.toString()}"));
     } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-        _scrollToBottom();
-      }
+      _store.setSending(false);
     }
   }
 
@@ -190,6 +236,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _store.removeListener(_scrollToBottom);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -198,29 +245,45 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ask GeoTaste')),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(12),
-              itemCount: _messages.length + (_isSending ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _messages.length) return const _TypingBubble();
-                return _MessageBubble(
-                  message: _messages[index],
-                  onLike: _onRecommendationLiked,
-                );
-              },
-            ),
-          ),
-          _ChatInputBar(
-            controller: _controller,
-            enabled: !_isSending,
-            onSend: _send,
+      appBar: AppBar(
+        title: const Text('Ask GeoTaste'),
+        actions: [
+          IconButton(
+            tooltip: 'New chat',
+            icon: const Icon(Icons.add_comment_outlined),
+            onPressed: _store.clear,
           ),
         ],
+      ),
+      body: AnimatedBuilder(
+        animation: _store,
+        builder: (context, _) {
+          final messages = _store.messages;
+          final sending = _store.isSending;
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: messages.length + (sending ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == messages.length) return const _TypingBubble();
+                    return _MessageBubble(
+                      message: messages[index],
+                      onLike: _onRecommendationLiked,
+                    );
+                  },
+                ),
+              ),
+              _ChatInputBar(
+                controller: _controller,
+                enabled: !sending,
+                onSend: _send,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
